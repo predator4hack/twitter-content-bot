@@ -9,47 +9,53 @@ An intelligent application that automatically extracts the most engaging clips f
 ### Core Technology Stack
 
 #### Frontend: Streamlit ✅ **RECOMMENDED**
+
 **Why Streamlit is Perfect for This Application:**
-- **Rapid Prototyping**: Get a functional UI in minutes, not hours
-- **Built-in Components**: Native video players, file uploads, progress bars
-- **Real-time Updates**: Perfect for showing video processing progress
-- **Python Integration**: Seamless integration with video processing libraries
-- **Deployment**: Easy deployment options (Streamlit Cloud, Docker, cloud platforms)
-- **Interactive Widgets**: Sliders for clip length, checkboxes for content filters
-- **Session State**: Maintain user preferences and processing state
+
+-   **Rapid Prototyping**: Get a functional UI in minutes, not hours
+-   **Built-in Components**: Native video players, file uploads, progress bars
+-   **Real-time Updates**: Perfect for showing video processing progress
+-   **Python Integration**: Seamless integration with video processing libraries
+-   **Deployment**: Easy deployment options (Streamlit Cloud, Docker, cloud platforms)
+-   **Interactive Widgets**: Sliders for clip length, checkboxes for content filters
+-   **Session State**: Maintain user preferences and processing state
 
 #### Backend: Python with Simple, Lightweight Architecture
 
 ### 🔧 Core Components & Libraries (MVP Focus)
 
 #### 1. Video Download & Basic Processing
-- **Primary**: `yt-dlp` (Most robust, actively maintained)
-  - Handles age-restricted content
-  - Better error handling than pytube
-  - Regular updates for YouTube changes
-  - Built-in format selection
-- **Video Processing**: `ffmpeg-python` for simple trimming and format conversion
-- **Thumbnail Extraction**: Built-in yt-dlp thumbnail capabilities
+
+-   **Primary**: `yt-dlp` (Most robust, actively maintained)
+    -   Handles age-restricted content
+    -   Better error handling than pytube
+    -   Regular updates for YouTube changes
+    -   Built-in format selection
+-   **Video Processing**: `ffmpeg-python` for simple trimming and format conversion
+-   **Thumbnail Extraction**: Built-in yt-dlp thumbnail capabilities
 
 #### 2. Audio-to-Text Transcription
-- **Whisper**: OpenAI's Whisper for high-quality speech-to-text
-  - Works offline (no API costs)
-  - Supports multiple languages
-  - Handles various audio qualities
-  - Provides timestamps for precise clipping
+
+-   **Whisper**: OpenAI's Whisper for high-quality speech-to-text
+    -   Works offline (no API costs)
+    -   Supports multiple languages
+    -   Handles various audio qualities
+    -   Provides timestamps for precise clipping
 
 #### 3. LLM-Powered Content Analysis
-- **Primary LLM Options**:
-  - **Google Gemini**: Free tier with good reasoning capabilities
-  - **Groq**: Fast inference for real-time processing
-- **Purpose**: Analyze transcript and identify engaging segments with reasoning
-- **Output**: Structured recommendations with timestamps and justification
+
+-   **Primary LLM Options**:
+    -   **Google Gemini**: Free tier with good reasoning capabilities
+    -   **Groq**: Fast inference for real-time processing
+-   **Purpose**: Analyze transcript and identify engaging segments with reasoning
+-   **Output**: Structured recommendations with timestamps and justification
 
 ## 🧠 LLM-Powered Clip Selection Strategy
 
 ### Intelligent Content Analysis with Reasoning
 
 #### 1. Whisper Transcription Pipeline
+
 ```python
 def transcribe_video(video_path):
     """
@@ -61,6 +67,7 @@ def transcribe_video(video_path):
 ```
 
 #### 2. LLM-Based Engagement Analysis
+
 ```python
 def analyze_with_llm(transcript, video_metadata):
     """
@@ -74,23 +81,24 @@ def analyze_with_llm(transcript, video_metadata):
 ```
 
 #### 3. Content-Type Specific Strategies
+
 ```python
 def get_content_strategy(video_type, transcript):
     """
     Recap/Summary Videos:
     - Evaluate if opening is punchy enough for Twitter
     - Compare with mid-video content strength
-    
+
     Tutorials/Educational:
     - Prioritize "lightbulb moments"
     - Focus on surprising shortcuts or tips
     - Identify clear before/after demonstrations
-    
+
     Entertainment:
     - Focus on peak energy moments
     - Identify funniest or most dramatic climaxes
     - Detect emotional peaks and reactions
-    
+
     Interviews/Podcasts:
     - Look for controversial statements
     - Find surprising revelations
@@ -99,6 +107,7 @@ def get_content_strategy(video_type, transcript):
 ```
 
 #### 4. Twitter Optimization
+
 ```python
 def optimize_for_twitter(clip_candidates):
     """
@@ -160,25 +169,25 @@ class LLMClipExtractor:
         self.transcriber = WhisperTranscriber()
         self.llm_analyzer = LLMAnalyzer()  # Gemini or Groq
         self.clipper = ClipExtractor()
-        
+
     def extract_best_clips(self, youtube_url, num_clips=2):
         """Simplified MVP pipeline"""
-        
+
         # 1. Download video and extract thumbnail
         video_info = self.downloader.download_with_metadata(youtube_url)
         video_path = video_info['path']
         thumbnail_path = video_info['thumbnail']
-        
+
         # 2. Transcribe with Whisper
         transcript_with_timestamps = self.transcriber.transcribe(video_path)
-        
+
         # 3. LLM Analysis for engagement
         analysis_result = self.llm_analyzer.analyze_content(
             transcript=transcript_with_timestamps,
             video_metadata=video_info,
             content_strategy=self.detect_content_type(transcript_with_timestamps)
         )
-        
+
         # 4. Extract clips based on LLM recommendations
         clips = []
         for recommendation in analysis_result['recommendations'][:num_clips]:
@@ -188,7 +197,7 @@ class LLMClipExtractor:
                 end_time=recommendation['end_time'],
                 reasoning=recommendation['reasoning']
             )
-            
+
             # 5. Optimize for Twitter
             optimized_clip = self.clipper.optimize_for_twitter(clip_data)
             clips.append({
@@ -197,7 +206,7 @@ class LLMClipExtractor:
                 'reasoning': recommendation['reasoning'],
                 'confidence': recommendation['confidence']
             })
-            
+
         return clips
 ```
 
@@ -266,43 +275,43 @@ pillow = "^10.0.0"
 
 #### Recap/Summary Videos
 
-- **Strategy**: Evaluate if opening recap is punchy enough for Twitter
-- **Analysis**: Compare opening energy vs. mid-video content strength
-- **LLM Prompt**: "Is the intro/recap compelling enough for social media, or should we focus on the main content?"
+-   **Strategy**: Evaluate if opening recap is punchy enough for Twitter
+-   **Analysis**: Compare opening energy vs. mid-video content strength
+-   **LLM Prompt**: "Is the intro/recap compelling enough for social media, or should we focus on the main content?"
 
 #### Educational/Tutorial Content
 
-- **Strategy**: Prioritize "lightbulb moments" and surprising shortcuts
-- **Focus Areas**: Clear before/after demonstrations, breakthrough insights
-- **LLM Analysis**: Look for phrases like "the secret is", "here's the trick", "most people don't know"
+-   **Strategy**: Prioritize "lightbulb moments" and surprising shortcuts
+-   **Focus Areas**: Clear before/after demonstrations, breakthrough insights
+-   **LLM Analysis**: Look for phrases like "the secret is", "here's the trick", "most people don't know"
 
 #### Entertainment/Vlogs
 
-- **Strategy**: Focus on peak energy, funniest moments, dramatic climaxes
-- **Detection**: Identify emotional peaks, reactions, plot twists
-- **LLM Cues**: Laughter, gasps, "I can't believe", "you won't believe what happened"
+-   **Strategy**: Focus on peak energy, funniest moments, dramatic climaxes
+-   **Detection**: Identify emotional peaks, reactions, plot twists
+-   **LLM Cues**: Laughter, gasps, "I can't believe", "you won't believe what happened"
 
 #### Interviews/Podcasts
 
-- **Strategy**: Look for controversial statements, surprising revelations, heated exchanges
-- **Key Moments**: Debates, disagreements, shocking admissions
-- **LLM Detection**: Strong opinions, controversial takes, surprising facts
+-   **Strategy**: Look for controversial statements, surprising revelations, heated exchanges
+-   **Key Moments**: Debates, disagreements, shocking admissions
+-   **LLM Detection**: Strong opinions, controversial takes, surprising facts
 
 ## 🔧 Technical Considerations (MVP)
 
 ### Simplified Architecture Benefits
 
-- **Fast Development**: Focus on core functionality without complex ML
-- **Lower Costs**: Whisper runs locally, LLM APIs are affordable
-- **Better Accuracy**: LLMs understand context better than traditional algorithms
-- **Easy Debugging**: Clear reasoning from LLM for each recommendation
+-   **Fast Development**: Focus on core functionality without complex ML
+-   **Lower Costs**: Whisper runs locally, LLM APIs are affordable
+-   **Better Accuracy**: LLMs understand context better than traditional algorithms
+-   **Easy Debugging**: Clear reasoning from LLM for each recommendation
 
 ### Quality Assurance
 
-- **LLM Validation**: Confidence scores for each recommendation
-- **Fallback Strategy**: If LLM fails, extract middle segment as default
-- **Content Validation**: Ensure clips have clear beginning/end
-- **Duration Optimization**: Smart trimming based on content flow
+-   **LLM Validation**: Confidence scores for each recommendation
+-   **Fallback Strategy**: If LLM fails, extract middle segment as default
+-   **Content Validation**: Ensure clips have clear beginning/end
+-   **Duration Optimization**: Smart trimming based on content flow
 
 ## 🎨 Streamlit UI Features (MVP)
 
@@ -321,22 +330,22 @@ content_type = st.radio("Content type", ["Auto-detect", "Educational", "Entertai
 if st.button("Extract Clips"):
     with st.spinner("Downloading video..."):
         video_info = download_video(url_input)
-    
+
     with st.spinner("Transcribing with Whisper..."):
         transcript = transcribe_video(video_info['path'])
-    
+
     with st.spinner("Analyzing with LLM..."):
         recommendations = analyze_with_llm(transcript, content_type)
-    
+
     # Results display
     for i, clip in enumerate(recommendations):
         st.subheader(f"Clip {i+1}")
         col1, col2 = st.columns([1, 2])
-        
+
         with col1:
             st.image(video_info['thumbnail'])
             st.download_button(f"Download Clip {i+1}", clip.data)
-        
+
         with col2:
             st.video(clip.path)
             st.write("**AI Reasoning:**", clip.reasoning)
@@ -345,38 +354,42 @@ if st.button("Extract Clips"):
 
 ### Key Features
 
-- **Thumbnail Preview**: Show video thumbnail for quick identification
-- **LLM Reasoning Display**: Show why the AI selected each clip
-- **Confidence Scores**: Display AI confidence in recommendations
-- **Simple Download**: One-click download for Twitter-ready clips
+-   **Thumbnail Preview**: Show video thumbnail for quick identification
+-   **LLM Reasoning Display**: Show why the AI selected each clip
+-   **Confidence Scores**: Display AI confidence in recommendations
+-   **Simple Download**: One-click download for Twitter-ready clips
 
 ## 🔒 Compliance & Best Practices
 
 ### YouTube Terms of Service
-- **Rate limiting** to avoid API abuse
-- **Attribution preservation** where required
-- **Content filtering** to respect copyright
-- **User consent** for processing videos
+
+-   **Rate limiting** to avoid API abuse
+-   **Attribution preservation** where required
+-   **Content filtering** to respect copyright
+-   **User consent** for processing videos
 
 ### Twitter Optimization
-- **Format compliance** (MP4, max 512MB)
-- **Aspect ratio optimization** (16:9, 1:1, 9:16)
-- **Caption generation** for accessibility
-- **Thumbnail extraction** for preview
+
+-   **Format compliance** (MP4, max 512MB)
+-   **Aspect ratio optimization** (16:9, 1:1, 9:16)
+-   **Caption generation** for accessibility
+-   **Thumbnail extraction** for preview
 
 ## 📈 Success Metrics
 
 ### Technical Metrics
-- **Processing speed**: Time from URL to final clips
-- **Accuracy**: Manual validation of "engaging" segments
-- **Success rate**: Percentage of videos processed successfully
-- **User satisfaction**: Feedback on clip quality
+
+-   **Processing speed**: Time from URL to final clips
+-   **Accuracy**: Manual validation of "engaging" segments
+-   **Success rate**: Percentage of videos processed successfully
+-   **User satisfaction**: Feedback on clip quality
 
 ### Engagement Metrics
-- **Twitter performance**: Views, likes, retweets on generated clips
-- **A/B testing**: Compare algorithm-selected vs. random clips
-- **User retention**: Return usage of the application
-- **Content creator adoption**: Usage by content creators
+
+-   **Twitter performance**: Views, likes, retweets on generated clips
+-   **A/B testing**: Compare algorithm-selected vs. random clips
+-   **User retention**: Return usage of the application
+-   **Content creator adoption**: Usage by content creators
 
 ## 🚀 Getting Started (MVP)
 
