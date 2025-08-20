@@ -115,3 +115,8 @@
 2025-08-20 10:38:30 | [33mWARNING[0m | test_levels:160 | Warning message
 2025-08-20 10:38:30 | [31mERROR[0m | test_levels:161 | Error message
 2025-08-20 10:38:30 | [35mCRITICAL[0m | test_levels:162 | Critical message
+2025-08-21 00:51:41 | [36mDEBUG[0m | test_levels:158 | Debug message
+2025-08-21 00:51:41 | [32mINFO[0m | test_levels:159 | Info message
+2025-08-21 00:51:41 | [33mWARNING[0m | test_levels:160 | Warning message
+2025-08-21 00:51:41 | [31mERROR[0m | test_levels:161 | Error message
+2025-08-21 00:51:41 | [35mCRITICAL[0m | test_levels:162 | Critical message
