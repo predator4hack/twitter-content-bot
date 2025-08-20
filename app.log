@@ -55,3 +55,8 @@
 2025-08-20 03:55:11 | [32mINFO[0m | integration_test:236 |    • Error handling: ✅ PASS (100.0%)
 2025-08-20 03:55:11 | [32mINFO[0m | integration_test:238 | 
 🎉 Task 1.2 real-world integration test complete!
+2025-08-20 10:21:29 | [36mDEBUG[0m | test_levels:158 | Debug message
+2025-08-20 10:21:29 | [32mINFO[0m | test_levels:159 | Info message
+2025-08-20 10:21:29 | [33mWARNING[0m | test_levels:160 | Warning message
+2025-08-20 10:21:29 | [31mERROR[0m | test_levels:161 | Error message
+2025-08-20 10:21:29 | [35mCRITICAL[0m | test_levels:162 | Critical message
