@@ -42,5 +42,12 @@ target-version = ['py38']
 profile = "black"
 line_length = 88
 
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "torch>=2.8.0",
+]
+
 [project.scripts]
 youtube-clipper = "src.ui.streamlit_app:main"

@@ -176,10 +176,10 @@ class TestDependencyImports:
         try:
             import streamlit
             import yt_dlp
-            import whisper
+            import faster_whisper
             import google.generativeai
             import groq
-            import ffmpeg
+            import ffmpeg_python
             import dotenv
             import requests
             import PIL
@@ -258,8 +258,8 @@ if __name__ == "__main__":
     # Test imports
     print("\n📦 Testing Dependencies...")
     dependencies = [
-        "streamlit", "yt_dlp", "whisper", "google.generativeai", 
-        "groq", "ffmpeg", "dotenv", "requests", "PIL", "numpy", "pandas"
+        "streamlit", "yt_dlp", "faster_whisper", "google.generativeai", 
+        "groq", "ffmpeg_python", "dotenv", "requests", "PIL", "numpy", "pandas"
     ]
     
     for dep in dependencies:

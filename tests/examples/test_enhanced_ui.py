@@ -248,7 +248,9 @@ def test_ui_components():
     logger.info(f"  - Average quality score: {avg_quality:.0f}/100")
     logger.info(f"  - Twitter compatibility: 100%")
     
-    return sample_data
+    # Test completed successfully
+    assert len(sample_data['extraction_results'].results) > 0
+    logger.info("✓ All UI components tested successfully")
 
 
 def validate_ui_requirements():

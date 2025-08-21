@@ -6,7 +6,23 @@ dist/
 wheels/
 *.egg-info
 
+# Environment and config
 .env
+.venv/
 
-# Virtual environments
-.venv
+# Cache and temporary files
+cache/
+temp/
+output/
+*.log
+.pytest_cache/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific files
+.DS_Store
+Thumbs.db

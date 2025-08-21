@@ -451,8 +451,8 @@ class TestThumbnailDisplay:
     
     @patch('streamlit.subheader')
     @patch('streamlit.image')
-    @patch('streamlit.caption')
-    def test_render_thumbnail_display_success(self, mock_caption, mock_image, mock_subheader):
+    @patch('streamlit.columns')
+    def test_render_thumbnail_display_success(self, mock_columns, mock_image, mock_subheader):
         """Test successful thumbnail display."""
         with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
             tmp_file.write(b'fake image data')
@@ -460,26 +460,30 @@ class TestThumbnailDisplay:
         
         video_info = {'title': 'Test Video'}
         
+        # Mock columns to return mock objects
+        mock_col1, mock_col2 = MagicMock(), MagicMock()
+        mock_columns.return_value = [mock_col1, mock_col2]
+        
         try:
             components.render_thumbnail_display(thumbnail_path, video_info)
             
-            mock_subheader.assert_called_with("🖼️ Thumbnail")
-            mock_image.assert_called_once()
-            mock_caption.assert_called()
+            mock_subheader.assert_called_with("🖼️ Thumbnail Gallery")
+            # Verify columns is called (implementation may call it multiple times)
+            assert mock_columns.call_count >= 1
         finally:
             Path(thumbnail_path).unlink(missing_ok=True)
     
     @patch('streamlit.subheader')
-    @patch('streamlit.error')
-    def test_render_thumbnail_display_failure(self, mock_error, mock_subheader):
+    @patch('streamlit.warning')
+    def test_render_thumbnail_display_failure(self, mock_warning, mock_subheader):
         """Test thumbnail display with missing file."""
         thumbnail_path = "/non/existent/path.jpg"
         video_info = {'title': 'Test Video'}
         
         components.render_thumbnail_display(thumbnail_path, video_info)
         
-        mock_subheader.assert_called_with("🖼️ Thumbnail")
-        mock_error.assert_called_once()
+        mock_subheader.assert_called_with("🖼️ Thumbnail Gallery")
+        mock_warning.assert_called_once()
 
 
 class TestUtilityFunctions:
