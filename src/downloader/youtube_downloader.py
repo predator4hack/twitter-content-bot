@@ -98,7 +98,7 @@ class YouTubeDownloader(LoggerMixin):
         self.output_dir = output_dir or config.TEMP_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # yt-dlp options
+        # yt-dlp options with improved compatibility
         self.ydl_opts = {
             'format': self._get_format_selector(),
             'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
@@ -108,29 +108,65 @@ class YouTubeDownloader(LoggerMixin):
             'no_warnings': False,
             'extractflat': False,
             'ignoreerrors': False,
+            # Add user agent to avoid blocking
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
+            # Use cookies if available
+            'cookiefile': None,
+            # Retry options
+            'retries': 3,
+            'fragment_retries': 3,
+            # Avoid problematic extractors
+            'extractor_retries': 3,
         }
         
         self.logger.info(f"YouTube downloader initialized with output dir: {self.output_dir}")
     
     def _get_format_selector(self) -> str:
-        """Get format selector based on configuration."""
+        """Get format selector based on configuration with fallbacks."""
         quality = config.YTDL_QUALITY
         format_type = config.YTDL_FORMAT
         
-        # Map quality settings to yt-dlp format selectors
-        quality_map = {
-            '480p': 'best[height<=480]',
-            '720p': 'best[height<=720]',
-            '1080p': 'best[height<=1080]',
-            'best': 'best',
-        }
+        # More flexible format selectors with fallbacks
+        if quality == '480p':
+            # Try 480p first, then fallback to lower qualities
+            formats = [
+                'best[height<=480][ext=mp4]',
+                'best[height<=480]',
+                'worst[height>=360][ext=mp4]',
+                'worst[height>=360]',
+                'best[ext=mp4]',
+                'best'
+            ]
+        elif quality == '720p':
+            formats = [
+                'best[height<=720][ext=mp4]',
+                'best[height<=720]',
+                'best[height<=480][ext=mp4]',
+                'best[height<=480]',
+                'best[ext=mp4]',
+                'best'
+            ]
+        elif quality == '1080p':
+            formats = [
+                'best[height<=1080][ext=mp4]',
+                'best[height<=1080]',
+                'best[height<=720][ext=mp4]',
+                'best[height<=720]',
+                'best[ext=mp4]',
+                'best'
+            ]
+        else:  # 'best' or fallback
+            formats = [
+                'best[ext=mp4]',
+                'best[height<=720][ext=mp4]',
+                'best[height<=720]',
+                'best'
+            ]
         
-        base_format = quality_map.get(quality, 'best[height<=720]')
-        
-        if format_type == 'mp4':
-            return f'{base_format}[ext=mp4]/best[ext=mp4]/{base_format}'
-        else:
-            return base_format
+        # Join with fallback operator
+        return '/'.join(formats)
     
     def get_video_info(self, url: str) -> Dict:
         """
@@ -152,22 +188,38 @@ class YouTubeDownloader(LoggerMixin):
         self.logger.info(f"Extracting info for: {normalized_url}")
         
         try:
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            # Use more robust options for info extraction
+            info_opts = {
+                'quiet': False,
+                'no_warnings': False,
+                'extract_flat': False,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                'retries': 3,
+                'fragment_retries': 3,
+                'extractor_retries': 3,
+            }
+            
+            with yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(normalized_url, download=False)
                 
+                if not info:
+                    raise ValueError("No video information could be extracted")
+                
                 return {
-                    'id': info.get('id'),
-                    'title': info.get('title'),
-                    'duration': info.get('duration'),
+                    'id': info.get('id', ''),
+                    'title': info.get('title', 'Unknown Title'),
+                    'duration': info.get('duration', 0),
                     'description': info.get('description', ''),
-                    'uploader': info.get('uploader'),
-                    'upload_date': info.get('upload_date'),
-                    'view_count': info.get('view_count'),
-                    'like_count': info.get('like_count'),
-                    'thumbnail': info.get('thumbnail'),
-                    'webpage_url': info.get('webpage_url'),
+                    'uploader': info.get('uploader', 'Unknown'),
+                    'upload_date': info.get('upload_date', ''),
+                    'view_count': info.get('view_count', 0),
+                    'like_count': info.get('like_count', 0),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'webpage_url': info.get('webpage_url', normalized_url),
                     'formats': len(info.get('formats', [])),
-                    'availability': info.get('availability'),
+                    'availability': info.get('availability', 'unknown'),
                 }
                 
         except yt_dlp.DownloadError as e:

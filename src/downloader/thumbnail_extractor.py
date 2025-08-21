@@ -61,13 +61,29 @@ class ThumbnailExtractor(LoggerMixin):
             ValueError: If video cannot be accessed
         """
         try:
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            # Use robust options for thumbnail extraction
+            info_opts = {
+                'quiet': False,
+                'no_warnings': False,
+                'extract_flat': False,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                'retries': 3,
+                'fragment_retries': 3,
+                'extractor_retries': 3,
+            }
+            
+            with yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(video_url, download=False)
+                
+                if not info:
+                    raise ValueError("No video information could be extracted")
                 
                 thumbnails = {}
                 
                 # Extract thumbnails from info
-                if 'thumbnails' in info:
+                if 'thumbnails' in info and info['thumbnails']:
                     for thumb in info['thumbnails']:
                         thumb_id = thumb.get('id', 'unknown')
                         thumb_url = thumb.get('url')
@@ -78,7 +94,7 @@ class ThumbnailExtractor(LoggerMixin):
                 if 'thumbnail' in info and info['thumbnail']:
                     thumbnails['default'] = info['thumbnail']
                 
-                # Generate standard YouTube thumbnail URLs
+                # Generate standard YouTube thumbnail URLs as fallback
                 video_id = info.get('id')
                 if video_id:
                     base_url = f"https://img.youtube.com/vi/{video_id}"
@@ -89,7 +105,14 @@ class ThumbnailExtractor(LoggerMixin):
                         'sddefault': f"{base_url}/sddefault.jpg",
                         'maxresdefault': f"{base_url}/maxresdefault.jpg",
                     }
-                    thumbnails.update(standard_thumbs)
+                    # Only add if we don't already have thumbnails
+                    if not thumbnails:
+                        thumbnails.update(standard_thumbs)
+                    else:
+                        # Add as fallback options
+                        for key, url in standard_thumbs.items():
+                            if key not in thumbnails:
+                                thumbnails[f"fallback_{key}"] = url
                 
                 self.logger.info(f"Found {len(thumbnails)} thumbnail URLs")
                 return thumbnails
@@ -142,8 +165,11 @@ class ThumbnailExtractor(LoggerMixin):
             try:
                 with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
                     info = ydl.extract_info(video_url, download=False)
-                    video_id = info.get('id', 'unknown')
-                    filename = f"{video_id}_{quality}"
+                    if info:
+                        video_id = info.get('id', 'unknown')
+                        filename = f"{video_id}_{quality}"
+                    else:
+                        filename = f"unknown_{quality}"
             except:
                 filename = f"thumbnail_{quality}"
         
@@ -276,7 +302,7 @@ class ThumbnailExtractor(LoggerMixin):
     def extract_and_process_thumbnails(
         self, 
         video_url: str,
-        sizes: List[str] = None,
+        sizes: Optional[List[str]] = None,
         filename_prefix: Optional[str] = None
     ) -> Dict[str, Path]:
         """
