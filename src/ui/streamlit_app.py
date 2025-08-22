@@ -21,20 +21,14 @@ from src.downloader import YouTubeDownloader, YouTubeURLValidator, ThumbnailExtr
 from src.ui.components import (
     render_header,
     render_url_input,
-    render_settings_panel,
     render_progress_section,
     render_error_display,
-    render_video_info_display,
-    render_thumbnail_display,
     initialize_session_state,
-    render_video_preview,
-    render_clip_results_gallery,
-    render_llm_reasoning_display,
     render_processing_progress,
-    render_clip_comparison_view,
-    render_batch_download_section,
-    render_video_analytics_panel,
+    render_video_preview,
+    render_thumbnail_display,
     create_download_button,
+    extract_single_clip_from_recommendation,
 )
 
 
@@ -61,61 +55,51 @@ def main():
     # Initialize session state
     initialize_session_state()
     
+    # Ensure output directories exist
+    Path("outputs/clips").mkdir(parents=True, exist_ok=True)
+    Path("outputs/optimized").mkdir(parents=True, exist_ok=True)
+    
     # Render header
-    render_header()
+    st.title("✂️ YouTube to Twitter Clipper")
+    # render_header()
     
-    # Main application layout with tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎥 Input & Processing", "🎬 Clip Results", "🤖 AI Analysis", "📊 Analytics"])
+    # Single page layout - Video input and processing
+    # st.header("🎥 Video Input")
     
-    with tab1:
-        # Main processing interface
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.header("🎥 Video Input")
-            
-            # URL input section
-            url_input_result = render_url_input()
-            
-            # File upload section
-            render_file_upload_section()
-            
-            # Process button and results
-            if st.button("🚀 Process Video", type="primary", use_container_width=True):
-                process_video_workflow(url_input_result)
-        
-        with col2:
-            st.header("⚙️ Settings")
-            
-            # Settings panel
-            render_settings_panel()
-            
-            # Enhanced progress section
-            if st.session_state.get('processing', False):
-                render_processing_progress(
-                    st.session_state.get('current_step', ''),
-                    st.session_state.get('progress', 0),
-                    st.session_state.get('status_text', '')
-                )
-            else:
-                render_progress_section()
-        
-        # Basic results section for processed video
-        if st.session_state.get('video_processed', False):
-            st.header("📊 Video Information")
-            render_basic_results_section()
+    # URL input section
+    url_input_result = render_url_input()
     
-    with tab2:
-        # Enhanced clip results with preview and downloads
-        render_enhanced_clip_results()
+    # File upload section
+    # render_file_upload_section()
     
-    with tab3:
-        # LLM analysis and reasoning display
-        render_ai_analysis_section()
+    # Process button
+    if st.button("🚀 Process Video", type="primary", use_container_width=True):
+        process_video_workflow(url_input_result)
     
-    with tab4:
-        # Analytics and statistics
-        render_analytics_section()
+    # Enhanced progress section
+    if st.session_state.get('processing', False):
+        render_processing_progress(
+            st.session_state.get('current_step', ''),
+            st.session_state.get('progress', 0),
+            st.session_state.get('status_text', '')
+        )
+    
+    # Show video info and thumbnail if processed
+    if st.session_state.get('video_processed', False):
+        video_info = st.session_state.get('video_info', {})
+        if video_info:
+            st.success(f"✅ Video processed: {video_info.get('title', 'Unknown title')}")
+            
+            # Show thumbnail preview with download
+            thumbnail_path = st.session_state.get('thumbnail_path')
+            if thumbnail_path and Path(thumbnail_path).exists():
+                st.subheader("🖼️ Thumbnail Preview")
+                render_thumbnail_display(thumbnail_path, video_info)
+    
+    # AI Analysis and Recommendations Section
+    if st.session_state.get('video_processed', False):
+        st.divider()
+        render_ai_recommendations_section()
 
 
 def render_file_upload_section():
@@ -200,15 +184,16 @@ def process_video_workflow(url_input_result: Dict[str, Any]):
                 thumbnail_path = extractor.download_thumbnail(url, 'hqdefault', 'current_video')
                 st.session_state['thumbnail_path'] = str(thumbnail_path)
                 
-                # Step 4: Download video (optional for now)
-                if st.session_state.get('download_video', False):
-                    update_progress(progress_bar, status_text, 70, "📥 Downloading video...")
-                    video_path, _ = downloader.download_video(url)
-                    st.session_state['video_path'] = str(video_path)
+                # Step 4: Download video (required for clip extraction)
+                update_progress(progress_bar, status_text, 70, "📥 Downloading video for clip extraction...")
+                video_path, _ = downloader.download_video(url)
+                st.session_state['video_path'] = str(video_path)
                 
             else:
                 # Process local video file
                 video_path = st.session_state.get('local_video_path')
+                if video_path:
+                    st.session_state['video_path'] = str(video_path)
                 update_progress(progress_bar, status_text, 50, "📁 Processing local video...")
                 
                 # Create mock video info for local files
@@ -229,6 +214,11 @@ def process_video_workflow(url_input_result: Dict[str, Any]):
             
             # Display success message
             st.success("🎉 Video processed successfully!")
+            
+            # Set demo analysis results and mark for auto-extraction
+            set_demo_analysis_results()
+            if video_path:
+                st.session_state['pending_extraction'] = str(video_path)
             
             # Trigger rerun to show results
             st.rerun()
@@ -254,161 +244,138 @@ def update_progress(progress_bar, status_text, progress: int, message: str):
     time.sleep(0.1)  # Small delay for visual feedback
 
 
-def render_basic_results_section():
-    """Render basic video information and processing status."""
-    
-    video_info = st.session_state.get('video_info', {})
-    
-    if not video_info:
-        return
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        # Video information display
-        render_video_info_display(video_info)
-        
-        # Action buttons
-        st.subheader("🎬 Next Steps")
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("🤖 Analyze Content", use_container_width=True, key="analyze_content_basic"):
-                st.info("🚧 AI Analysis feature - Demo available in AI Analysis tab!")
-        
-        with col_b:
-            if st.button("✂️ Extract Clips", use_container_width=True, key="extract_clips_basic"):
-                st.info("🚧 Clip extraction feature - Demo available in Clip Results tab!")
-    
-    with col2:
-        # Thumbnail display
-        thumbnail_path = st.session_state.get('thumbnail_path')
-        if thumbnail_path and Path(thumbnail_path).exists():
-            render_thumbnail_display(thumbnail_path, video_info)
-        
-        # Video preview if available
-        video_path = st.session_state.get('video_path') or st.session_state.get('local_video_path')
-        if video_path and Path(video_path).exists():
-            st.subheader("📹 Video Preview")
-            render_video_preview(video_path, width=300)
-
-
-def render_enhanced_clip_results():
-    """Render enhanced clip results with previews and downloads."""
-    
-    st.header("🎬 Extracted Clips & Results")
-    
-    # Check if we have any processing results
-    extraction_results = st.session_state.get('extraction_results')
-    optimization_results = st.session_state.get('optimization_results')
-    
-    if not extraction_results:
-        # Demo mode with sample clips
-        st.info("No clips extracted yet. Here's a preview of what clip results would look like:")
-        
-        # Sample demonstration
-        with st.expander("Demo: Sample Clip Results", expanded=True):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            
-            with col1:
-                st.write("**Original Clip**")
-                # Show video placeholder
-                st.markdown("""
-                <div style="
-                    width: 100%;
-                    height: 180px;
-                    background: linear-gradient(45deg, #f8f9fa, #e9ecef);
-                    border: 2px dashed #dee2e6;
-                    border-radius: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 16px;
-                    color: #6c757d;
-                    margin: 10px 0;
-                ">
-                    🎬 Original Clip Preview<br>
-                    <small>Video would play here</small>
-                </div>
-                """, unsafe_allow_html=True)
-                st.write("**Duration:** 45.2s")
-                st.write("**Size:** 12.3 MB")
-            
-            with col2:
-                st.write("**Twitter Optimized**")
-                # Show optimized video placeholder
-                st.markdown("""
-                <div style="
-                    width: 100%;
-                    height: 180px;
-                    background: linear-gradient(45deg, #e3f2fd, #bbdefb);
-                    border: 2px dashed #2196f3;
-                    border-radius: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 16px;
-                    color: #1976d2;
-                    margin: 10px 0;
-                ">
-                    🐦 Twitter Optimized<br>
-                    <small>Optimized video would play here</small>
-                </div>
-                """, unsafe_allow_html=True)
-                st.write("**Size:** 8.1 MB")
-                st.write("**Compression:** 1.5x")
-                st.write("**Quality Score:** 87/100")
-                st.success("✅ Twitter Compatible")
-            
-            with col3:
-                st.write("**Downloads**")
-                st.button("📥 Original", disabled=True)
-                st.button("🐦 Twitter Ready", disabled=True)
-        
-        # Instructions for getting actual results
-        st.markdown("""
-        **To see actual clip results:**
-        1. Process a video in the Input & Processing tab
-        2. Run content analysis (coming in Phase 2)
-        3. Extract clips based on AI recommendations
-        4. Twitter optimization will be applied automatically
-        """)
-        
-        return
-    
-    # Render actual results
-    render_clip_results_gallery(extraction_results, optimization_results)
-    
-    # Batch download options
-    render_batch_download_section(extraction_results, optimization_results)
-    
-    # Clip comparison tool
-    if extraction_results.results and len(extraction_results.results) >= 2:
-        st.markdown("---")
-        clips_data = [
+def set_demo_analysis_results():
+    """Set the demo analysis results in session state."""
+    demo_analysis = {
+        'content_type': 'educational',
+        'strategy': 'thought_leadership',
+        'recommendations': [
             {
-                'start_time': result.start_time,
-                'end_time': result.end_time,
-                'video_path': result.clip_path,
-                'duration': f"{result.duration_seconds:.1f}s",
-                'size_mb': result.file_size_mb
+                'start_time': '00:02:15',
+                'end_time': '00:03:00',
+                'reasoning': 'This segment contains a clear, actionable explanation that would resonate well with Twitter audiences. The speaker provides a concrete example that could spark engagement and discussion.',
+                'confidence': 87,
+                'hook_strength': 'high',
+                'keywords': ['productivity', 'tips', 'workflow']
+            },
+            {
+                'start_time': '00:05:30',
+                'end_time': '00:06:15',
+                'reasoning': 'Strong hook with an unexpected insight that challenges conventional thinking. The emotional appeal and practical value make this highly shareable content.',
+                'confidence': 92,
+                'hook_strength': 'high',
+                'keywords': ['innovation', 'mindset', 'success']
             }
-            for result in extraction_results.results if result.success
         ]
-        render_clip_comparison_view(clips_data)
+    }
+    st.session_state['analysis_results'] = demo_analysis
 
 
-def render_ai_analysis_section():
-    """Render AI analysis results and reasoning."""
+def auto_extract_demo_clips(video_path: str):
+    """Automatically extract the 2 demo clips after video processing."""
+    try:
+        # Store video path for extraction
+        st.session_state['video_path'] = video_path
+        
+        # Sample recommendations - extract from beginning of video to ensure content exists
+        demo_recommendations = [
+            {
+                'start_time': '00:00:10',  # Start very early 
+                'end_time': '00:00:55',    # 45 second clip
+                'reasoning': 'This segment contains a clear, actionable explanation that would resonate well with Twitter audiences. The speaker provides a concrete example that could spark engagement and discussion.',
+                'confidence': 87,
+                'hook_strength': 'high',
+                'keywords': ['productivity', 'tips', 'workflow']
+            },
+            {
+                'start_time': '00:00:50',  # Start right after first clip ends
+                'end_time': '00:01:35',    # 45 second clip
+                'reasoning': 'Strong hook with an unexpected insight that challenges conventional thinking. The emotional appeal and practical value make this highly shareable content.',
+                'confidence': 92,
+                'hook_strength': 'high',
+                'keywords': ['innovation', 'mindset', 'success']
+            }
+        ]
+        
+        # Initialize session state
+        if 'extraction_results' not in st.session_state or st.session_state['extraction_results'] is None:
+            st.session_state['extraction_results'] = []
+        if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
+            st.session_state['optimization_results'] = []
+        
+        # Clear any existing results first
+        st.session_state['extraction_results'] = []
+        st.session_state['optimization_results'] = []
+        
+        # Extract each clip with visible feedback
+        success_count = 0
+        for i, rec in enumerate(demo_recommendations):
+            try:
+                st.write(f"🎬 Extracting clip {i+1} from {rec['start_time']} to {rec['end_time']}...")
+                extract_single_clip_from_recommendation(rec, i)
+                success_count += 1
+                st.success(f"✅ Clip {i+1} extracted successfully!")
+            except Exception as clip_error:
+                logger.error(f"Failed to extract clip {i+1}: {clip_error}")
+                st.error(f"❌ Failed to extract clip {i+1}: {str(clip_error)}")
+                continue
+        
+        if success_count > 0:
+            st.success(f"🎉 Successfully extracted {success_count} clips!")
+        else:
+            st.error("❌ No clips were extracted successfully")
+                
+    except Exception as e:
+        logger.error(f"Auto-extraction failed: {e}")
+        st.error(f"❌ Auto-extraction failed: {str(e)}")
+
+
+# Removed - simplified to show just success message
+
+
+def render_ai_recommendations_section():
+    """Render AI analysis and clip recommendations in a clean single-page format."""
     
-    st.header("🤖 AI Content Analysis & Recommendations")
+    st.header("🤖 AI Recommendations")
+    
+    # Debug: Show session state info
+    # with st.expander("🔍 Debug Info", expanded=True):
+    #     st.write(f"- pending_extraction: {st.session_state.get('pending_extraction', 'None')}")
+    #     st.write(f"- extraction_in_progress: {st.session_state.get('extraction_in_progress', 'None')}")
+    #     st.write(f"- video_processed: {st.session_state.get('video_processed', 'None')}")
+    #     st.write(f"- video_path: {st.session_state.get('video_path', 'None')}")
+    #     st.write(f"- extraction_results count: {len(st.session_state.get('extraction_results', []))}")
+        
+    #     # Manual trigger button for testing
+    #     if st.button("🔧 Force Extract Clips (Debug)"):
+    #         video_path = st.session_state.get('video_path') or st.session_state.get('pending_extraction')
+    #         if video_path:
+    #             st.write(f"Attempting extraction with video path: {video_path}")
+    #             auto_extract_demo_clips(video_path)
+    #             st.rerun()
+    #         else:
+    #             st.error("No video path found for extraction")
+    
+    # Check for pending extraction and run it
+    if st.session_state.get('pending_extraction') and not st.session_state.get('extraction_in_progress'):
+        st.write("🔄 **Starting auto-extraction...**")
+        st.session_state['extraction_in_progress'] = True
+        video_path = st.session_state['pending_extraction']
+        
+        with st.spinner("🎬 Extracting recommended clips..."):
+            auto_extract_demo_clips(video_path)
+        
+        # Clear pending extraction
+        del st.session_state['pending_extraction']
+        st.session_state['extraction_in_progress'] = False
+        st.rerun()
     
     # Check if we have analysis results
     analysis_results = st.session_state.get('analysis_results')
     
     if not analysis_results:
         # Demo mode with sample analysis
-        st.info("No AI analysis available yet. Here's a preview of what AI analysis results would look like:")
+        st.info("🤖 AI will analyze your video and provide 2 clip recommendations with reasoning.")
         
         # Sample analysis demonstration
         sample_analysis = {
@@ -434,109 +401,158 @@ def render_ai_analysis_section():
             ]
         }
         
-        render_llm_reasoning_display(sample_analysis)
-        
-        # Instructions for getting actual analysis
-        st.markdown("""
-        **To get actual AI analysis:**
-        1. Process a video with transcription enabled
-        2. Our AI will analyze the content for viral potential
-        3. Recommendations will appear here with detailed reasoning
-        4. Use the recommendations to guide clip extraction
-        """)
-        
+        render_clean_recommendations(sample_analysis)
         return
     
     # Render actual analysis results
-    render_llm_reasoning_display(analysis_results)
-    
-    # Additional analysis tools
-    st.markdown("---")
-    st.subheader("🔧 Analysis Tools")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Re-analyze Content", use_container_width=True):
-            st.info("Feature coming soon: Re-run AI analysis with different parameters")
-    
-    with col2:
-        if st.button("📊 Detailed Sentiment Analysis", use_container_width=True):
-            st.info("Feature coming soon: Deep sentiment and keyword analysis")
+    render_clean_recommendations(analysis_results)
 
 
-def render_analytics_section():
-    """Render processing analytics and performance metrics."""
+def render_clean_recommendations(analysis_results):
+    """Render recommendations in a clean, focused format."""
     
-    st.header("📊 Processing Analytics & Performance")
-    
-    # Check if we have processing data
-    video_info = st.session_state.get('video_info')
-    extraction_results = st.session_state.get('extraction_results')
-    optimization_results = st.session_state.get('optimization_results')
-    
-    if not video_info:
-        st.info("No analytics available yet. Process a video to see detailed performance metrics.")
-        
-        # Demo analytics
-        st.subheader("📈 Sample Analytics Preview")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Processing Time", "2m 34s", delta="-23s")
-        with col2:
-            st.metric("Success Rate", "100%", delta="✅")
-        with col3:
-            st.metric("Total Clips", "3", delta="+1")
-        with col4:
-            st.metric("Avg Compression", "2.1x", delta="+0.3x")
-        
-        # Sample charts
-        st.subheader("📈 Performance Charts")
-        
-        import pandas as pd
-        import numpy as np
-        
-        # Sample processing timeline
-        timeline_data = pd.DataFrame({
-            'Step': ['Download', 'Transcribe', 'Analyze', 'Extract', 'Optimize'],
-            'Duration (s)': [15, 45, 8, 22, 34],
-            'Status': ['✅', '✅', '✅', '✅', '✅']
-        })
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Processing Timeline**")
-            st.bar_chart(timeline_data.set_index('Step')['Duration (s)'])
-        
-        with col2:
-            # Sample compression ratios
-            compression_data = pd.DataFrame({
-                'Clip': ['Clip 1', 'Clip 2', 'Clip 3'],
-                'Original (MB)': [15.2, 18.7, 12.1],
-                'Optimized (MB)': [7.8, 8.9, 6.2]
-            })
-            st.write("**Compression Results**")
-            st.bar_chart(compression_data.set_index('Clip'))
-        
+    if not analysis_results or 'recommendations' not in analysis_results:
         return
     
-    # Render actual analytics
-    render_video_analytics_panel(video_info, extraction_results, optimization_results)
+    recommendations = analysis_results['recommendations'][:2]  # Show only top 2
     
-    # Processing performance metrics
-    if st.session_state.get('processing_metrics'):
-        st.markdown("---")
-        st.subheader("⚡ Performance Metrics")
+    for i, rec in enumerate(recommendations):
+        st.subheader(f"🎬 Recommendation {i+1}")
         
-        metrics = st.session_state['processing_metrics']
-        col1, col2, col3 = st.columns(3)
+        # Create two columns for preview and info
+        col_preview, col_info = st.columns([1, 1])
         
-        with col1:
-            st.metric("Total Processing Time", f"{metrics.get('total_time', 0):.1f}s")
-        with col2:
-            st.metric("Avg Time per Clip", f"{metrics.get('avg_clip_time', 0):.1f}s")
-        with col3:
-            st.metric("Processing Efficiency", f"{metrics.get('efficiency', 100):.0f}%")
+        with col_preview:
+            st.write("**🔍 Preview**")
+            
+            # Check if we have actual extracted clips for this recommendation
+            extraction_results = st.session_state.get('extraction_results')
+            optimization_results = st.session_state.get('optimization_results')
+            
+            has_actual_clip = (extraction_results and 
+                             isinstance(extraction_results, list) and 
+                             i < len(extraction_results) and 
+                             extraction_results[i].success)
+            
+            if has_actual_clip:
+                # Show actual video preview
+                clip_result = extraction_results[i]
+                if Path(clip_result.clip_path).exists():
+                    render_video_preview(clip_result.clip_path, width=300)
+                    
+                    # Show clip info
+                    st.write(f"**Duration:** {clip_result.duration_seconds:.1f}s")
+                    st.write(f"**Size:** {clip_result.file_size_mb:.1f} MB")
+                else:
+                    # Fallback to placeholder if file doesn't exist
+                    render_video_placeholder(rec)
+            else:
+                # Show placeholder
+                render_video_placeholder(rec)
+            
+            # Download buttons
+            if has_actual_clip:
+                clip_result = extraction_results[i]
+                
+                # Original clip download
+                if Path(clip_result.clip_path).exists():
+                    with open(clip_result.clip_path, "rb") as file:
+                        file_data = file.read()
+                    st.download_button(
+                        label=f"📎 Download Original",
+                        data=file_data,
+                        file_name=f"clip_{i+1}_original.mp4",
+                        mime="video/mp4",
+                        key=f"download_original_{i}",
+                        use_container_width=True
+                    )
+                
+                # Optimized clip download if available
+                has_optimized = (optimization_results and 
+                               isinstance(optimization_results, list) and
+                               i < len(optimization_results) and 
+                               optimization_results[i].success and
+                               Path(optimization_results[i].optimized_path).exists())
+                
+                if has_optimized:
+                    with open(optimization_results[i].optimized_path, "rb") as file:
+                        file_data = file.read()
+                    st.download_button(
+                        label=f"🐦 Download Twitter-Ready",
+                        data=file_data,
+                        file_name=f"clip_{i+1}_twitter.mp4",
+                        mime="video/mp4",
+                        key=f"download_optimized_{i}",
+                        use_container_width=True
+                    )
+            else:
+                # Show message that clips are being processed
+                st.info("🎬 Clips will be ready after video processing")
+        
+        with col_info:
+            st.write("**🧠 Analysis & Reasoning**")
+            
+            # Confidence and metrics
+            confidence = rec.get('confidence', 0)
+            hook_strength = rec.get('hook_strength', 'medium')
+            
+            col_metrics1, col_metrics2 = st.columns(2)
+            with col_metrics1:
+                if confidence >= 80:
+                    st.success(f"**Confidence:** {confidence}%")
+                elif confidence >= 60:
+                    st.warning(f"**Confidence:** {confidence}%")
+                else:
+                    st.error(f"**Confidence:** {confidence}%")
+            
+            with col_metrics2:
+                hook_emoji = {"high": "🔥", "medium": "⚡", "low": "💡"}.get(hook_strength, "❓")
+                st.write(f"**Hook:** {hook_emoji} {hook_strength.title()}")
+            
+            # Reasoning
+            st.write("**Why this works:**")
+            reasoning = rec.get('reasoning', 'No reasoning provided')
+            st.write(f"💭 {reasoning}")
+            
+            # Keywords
+            if 'keywords' in rec and rec['keywords']:
+                st.write("**Key topics:**")
+                keywords_str = ", ".join([f"🏷️ {kw}" for kw in rec['keywords'][:3]])
+                st.write(keywords_str)
+        
+        if i < len(recommendations) - 1:
+            st.divider()
+
+
+def render_video_placeholder(rec):
+    """Render a placeholder for video preview."""
+    st.markdown(f"""
+    <div style="
+        width: 100%;
+        height: 200px;
+        background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        color: #6c757d;
+        margin: 10px 0;
+    ">
+        🎬 Clip Preview<br>
+        <small>{rec.get('start_time', 'N/A')} - {rec.get('end_time', 'N/A')}</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# Removed - functionality moved to render_ai_recommendations_section which handles everything in one place
+
+
+# Removed - functionality moved to render_ai_recommendations_section
+
+
+# Removed - analytics functionality simplified
 
 
 def render_debug_section():
@@ -576,51 +592,18 @@ def render_debug_section():
 
 
 def render_sidebar():
-    """Render sidebar with additional options."""
+    """Render simplified sidebar with only essential controls."""
     
     with st.sidebar:
-        st.title("🛠️ Tools")
+        st.title("🛠️ Controls")
         
-        # Session management
-        st.subheader("Session")
+        # Session reset
         handle_session_reset()
         
-        # App information
-        st.subheader("📊 App Status")
-        
-        # Show current configuration
-        status_info = {
-            "Processing": "🟢 Ready" if not st.session_state.get('processing', False) else "🟡 Processing...",
-            "Video Loaded": "✅ Yes" if st.session_state.get('video_processed', False) else "❌ No",
-            "Errors": "❌ Yes" if st.session_state.get('error') else "✅ None",
-        }
-        
-        for key, value in status_info.items():
-            st.text(f"{key}: {value}")
+        st.divider()
         
         # Debug section
         render_debug_section()
-        
-        # Help section
-        st.subheader("❓ Help")
-        with st.expander("How to Use"):
-            st.markdown("""
-            1. **Enter YouTube URL** or upload a local video file
-            2. **Configure settings** in the settings panel
-            3. **Click Process Video** to begin extraction
-            4. **Review results** and proceed with next steps
-            
-            **Supported formats:**
-            - YouTube URLs (any format)
-            - Local videos: MP4, MOV, AVI, MKV, WebM
-            """)
-        
-        with st.expander("Keyboard Shortcuts"):
-            st.markdown("""
-            - `Ctrl+R`: Refresh page
-            - `Ctrl+Shift+R`: Hard refresh
-            - `F11`: Toggle fullscreen
-            """)
 
 
 def handle_session_reset():

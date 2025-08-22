@@ -42,6 +42,8 @@ def initialize_session_state():
         'theme': 'light',
         'settings_expanded': True,
         'debug_mode': False,
+        'extraction_results': [],
+        'optimization_results': [],
     }
     
     for key, value in defaults.items():
@@ -130,12 +132,12 @@ def render_url_input() -> Dict[str, Any]:
                 st.success(f"✅ Valid YouTube URL detected")
                 
                 # Show URL info
-                with st.expander("🔍 URL Information"):
-                    st.json({
-                        "Video ID": video_id,
-                        "Normalized URL": normalized_url,
-                        "URL Format": "Valid YouTube format"
-                    })
+                # with st.expander("🔍 URL Information"):
+                #     st.json({
+                #         "Video ID": video_id,
+                #         "Normalized URL": normalized_url,
+                #         "URL Format": "Valid YouTube format"
+                #     })
                 
             else:
                 validation_result['error'] = "Invalid YouTube URL format"
@@ -406,7 +408,7 @@ def render_thumbnail_display(thumbnail_path: str, video_info: Dict[str, Any]):
         video_info: Video metadata for caption
     """
     
-    st.subheader("🖼️ Thumbnail Gallery")
+    # st.subheader("🖼️ Thumbnail Gallery")
     
     try:
         # Check if thumbnail exists
@@ -423,7 +425,7 @@ def render_thumbnail_display(thumbnail_path: str, video_info: Dict[str, Any]):
             st.image(
                 thumbnail_path,
                 caption=video_info.get('title', 'Video Thumbnail'),
-                use_column_width=True
+                use_container_width=True
             )
         
         with col2:
@@ -449,29 +451,29 @@ def render_thumbnail_display(thumbnail_path: str, video_info: Dict[str, Any]):
                     st.rerun()
         
         # Check for additional thumbnails in the same directory
-        thumbnail_dir = Path(thumbnail_path).parent
-        if thumbnail_dir.exists():
-            thumbnail_files = list(thumbnail_dir.glob("*.jpg")) + list(thumbnail_dir.glob("*.png"))
+        # thumbnail_dir = Path(thumbnail_path).parent
+        # if thumbnail_dir.exists():
+        #     thumbnail_files = list(thumbnail_dir.glob("*.jpg")) + list(thumbnail_dir.glob("*.png"))
             
-            if len(thumbnail_files) > 1:
-                st.subheader("📚 Additional Thumbnails")
+        #     if len(thumbnail_files) > 1:
+        #         st.subheader("📚 Additional Thumbnails")
                 
-                # Create thumbnail grid
-                cols = st.columns(min(4, len(thumbnail_files)))
-                for i, thumb_file in enumerate(thumbnail_files):
-                    with cols[i % len(cols)]:
-                        try:
-                            st.image(
-                                str(thumb_file),
-                                caption=thumb_file.stem,
-                                use_column_width=True
-                            )
+        #         # Create thumbnail grid
+        #         cols = st.columns(min(4, len(thumbnail_files)))
+        #         for i, thumb_file in enumerate(thumbnail_files):
+        #             with cols[i % len(cols)]:
+        #                 try:
+        #                     st.image(
+        #                         str(thumb_file),
+        #                         caption=thumb_file.stem,
+        #                         use_column_width=True
+        #                     )
                             
-                            # Quick actions for each thumbnail
-                            if st.button(f"📥 {thumb_file.stem}", key=f"download_thumb_{i}", use_container_width=True):
-                                create_download_button(str(thumb_file), thumb_file.name, "image/jpeg")
-                        except Exception as e:
-                            st.error(f"Failed to load {thumb_file.name}")
+        #                     # Quick actions for each thumbnail
+        #                     if st.button(f"📥 {thumb_file.stem}", key=f"download_thumb_{i}", use_container_width=True):
+        #                         create_download_button(str(thumb_file), thumb_file.name, "image/jpeg")
+        #                 except Exception as e:
+        #                     st.error(f"Failed to load {thumb_file.name}")
         
     except Exception as e:
         st.error(f"Failed to load thumbnail: {e}")
@@ -855,10 +857,27 @@ def render_clip_card(clip_result, optimized_clips, index):
         st.write(f"⏱️ {clip_result.start_time} - {clip_result.end_time}")
         
         # Video preview (smaller for grid)
-        if Path(clip_result.clip_path).exists():
-            st.video(clip_result.clip_path, start_time=0)
+        video_path = Path(clip_result.clip_path)
+        if video_path.exists():
+            st.video(str(video_path.resolve()), start_time=0)
         else:
-            st.info("Video not available")
+            # Try alternative paths
+            alt_paths = [
+                Path("outputs/clips") / video_path.name,
+                Path("outputs/optimized") / video_path.name,
+                video_path.name  # Just the filename
+            ]
+            
+            video_found = False
+            for alt_path in alt_paths:
+                if alt_path.exists():
+                    st.video(str(alt_path.resolve()), start_time=0)
+                    video_found = True
+                    break
+            
+            if not video_found:
+                st.warning(f"⚠️ Video not found: {clip_result.clip_path}")
+                st.caption("The video file may have been moved or deleted.")
         
         # Quick metadata
         col1, col2 = st.columns(2)
@@ -899,12 +918,28 @@ def render_clip_expanded(clip_result, optimized_clips, index):
         with col1:
             # Video preview
             st.write("**Original Clip**")
-            if Path(clip_result.clip_path).exists():
+            video_path = Path(clip_result.clip_path)
+            if video_path.exists():
                 # Enhanced video preview with controls
-                render_video_preview(clip_result.clip_path, width=300)
+                render_video_preview(str(video_path.resolve()), width=300)
             else:
-                # Show placeholder for missing video
-                st.markdown("""
+                # Try alternative paths
+                alt_paths = [
+                    Path("outputs/clips") / video_path.name,
+                    Path("outputs/optimized") / video_path.name,
+                    video_path.name  # Just the filename
+                ]
+                
+                video_found = False
+                for alt_path in alt_paths:
+                    if alt_path.exists():
+                        render_video_preview(str(alt_path.resolve()), width=300)
+                        video_found = True
+                        break
+                
+                if not video_found:
+                    # Show placeholder for missing video
+                    st.markdown("""
                 <div style="
                     width: 100%;
                     height: 200px;
@@ -932,7 +967,7 @@ def render_clip_expanded(clip_result, optimized_clips, index):
                 thumbnail_path = generate_clip_thumbnail(clip_result.clip_path, index)
                 if thumbnail_path:
                     st.write("**Thumbnail:**")
-                    st.image(thumbnail_path, use_column_width=True)
+                    st.image(thumbnail_path, use_container_width=True)
         
         with col2:
             # Optimized version if available
@@ -1258,7 +1293,7 @@ def render_llm_reasoning_display(analysis_results: Optional[Dict[str, Any]] = No
                 
                 with col_action1:
                     if st.button(f"✂️ Extract This Clip", key=f"extract_clip_{i}", use_container_width=True):
-                        st.success("🎬 Clip extraction initiated! Check the Clip Results tab for progress.")
+                        extract_single_clip_from_recommendation(rec, i)
                 
                 with col_action2:
                     if st.button(f"🔍 Detailed Analysis", key=f"detailed_analysis_{i}", use_container_width=True):
@@ -2114,3 +2149,170 @@ def render_video_analytics_panel(
                 st.metric("Avg Quality Score", f"{avg_quality:.0f}/100")
             with col3:
                 st.metric("Total Optimized Size", f"{total_optimized_size:.1f} MB")
+
+
+def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> None:
+    """
+    Extract a single clip based on LLM recommendation.
+    
+    Args:
+        rec: LLM recommendation dictionary
+        index: Index of the recommendation
+    """
+    try:
+        # Get video path from session state
+        video_path = st.session_state.get('video_path') or st.session_state.get('local_video_path')
+        
+        # If no video path, try to download the video
+        if not video_path:
+            youtube_url = st.session_state.get('url')
+            if not youtube_url or not st.session_state.get('valid_url'):
+                st.error("❌ No valid YouTube URL available. Please process a video first.")
+                return
+            
+            # Download video for clip extraction
+            with st.spinner("📥 Downloading video for clip extraction..."):
+                try:
+                    from src.downloader import YouTubeDownloader
+                    downloader = YouTubeDownloader()
+                    downloaded_video_path, _ = downloader.download_video(youtube_url)
+                    st.session_state['video_path'] = str(downloaded_video_path)
+                    video_path = str(downloaded_video_path)
+                    st.success("✅ Video downloaded successfully!")
+                except Exception as e:
+                    st.error(f"❌ Failed to download video: {str(e)}")
+                    return
+        
+        # Validate video file exists
+        if not Path(video_path).exists():
+            st.error(f"❌ Video file not found: {video_path}")
+            return
+        
+        # Extract timing information
+        start_time = rec.get('start_time', '00:00:00')
+        end_time = rec.get('end_time', '00:01:00')
+        
+        # Convert recommendation to ClipRecommendation object
+        try:
+            from src.analyzer.llm_analyzer import ClipRecommendation, HookStrength
+            clip_recommendation = ClipRecommendation(
+                start_time=start_time,
+                end_time=end_time,
+                reasoning=rec.get('reasoning', 'AI recommended clip'),
+                confidence=rec.get('confidence', 80),
+                hook_strength=HookStrength(rec.get('hook_strength', 'medium')),
+                keywords=rec.get('keywords', []),
+                sentiment=rec.get('sentiment', 'positive')
+            )
+        except Exception as e:
+            st.error(f"❌ Error creating clip recommendation: {e}")
+            return
+        
+        # Show progress
+        progress_container = st.container()
+        with progress_container:
+            with st.spinner(f"🎬 Extracting clip {index + 1}..."):
+                try:
+                    # Ensure output directories exist
+                    clips_dir = Path("outputs/clips")
+                    optimized_dir = Path("outputs/optimized")
+                    clips_dir.mkdir(parents=True, exist_ok=True)
+                    optimized_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Verify directories were created
+                    if not clips_dir.exists():
+                        st.error(f"❌ Failed to create clips directory: {clips_dir}")
+                        return
+                    if not optimized_dir.exists():
+                        st.error(f"❌ Failed to create optimized directory: {optimized_dir}")
+                        return
+                    
+                    # Initialize clip extractor (import locally to avoid circular imports)
+                    from src.clipper.clip_extractor import ClipExtractor
+                    clip_extractor = ClipExtractor(
+                        output_dir=clips_dir,
+                        cleanup_temp=False
+                    )
+                    
+                    # Show extraction info
+                    st.info(f"⏰ Extracting clip from {start_time} to {end_time}")
+                    
+                    # Extract the clip
+                    extraction_result = clip_extractor.extract_clips_from_recommendations(
+                        source_video=str(video_path),
+                        recommendations=[clip_recommendation]
+                    )
+                    
+                    if extraction_result.results and extraction_result.results[0].success:
+                        extracted_clip = extraction_result.results[0]
+                        
+                        # Optimize for Twitter
+                        with st.spinner("🐦 Optimizing for Twitter..."):
+                            from src.clipper.twitter_optimizer import TwitterOptimizer
+                            twitter_optimizer = TwitterOptimizer(
+                                output_dir=optimized_dir
+                            )
+                            
+                            from src.clipper.twitter_optimizer import VideoQuality
+                            optimization_result = twitter_optimizer.optimize_for_twitter(
+                                input_path=extracted_clip.clip_path,
+                                quality=VideoQuality.HIGH
+                            )
+                        
+                        # Store results in session state
+                        if 'extraction_results' not in st.session_state or st.session_state['extraction_results'] is None:
+                            st.session_state['extraction_results'] = []
+                        
+                        if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
+                            st.session_state['optimization_results'] = []
+                        
+                        # Add to results
+                        st.session_state['extraction_results'].append(extracted_clip)
+                        
+                        if optimization_result.success:
+                            st.session_state['optimization_results'].append(optimization_result)
+                        
+                        # Show success message
+                        st.success(f"✅ Clip {index + 1} extracted successfully!")
+                        st.info(f"📁 Original: {extracted_clip.clip_path}")
+                        if optimization_result.success:
+                            st.info(f"🐦 Optimized: {optimization_result.optimized_path}")
+                        
+                        # Update metrics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Duration", f"{extracted_clip.duration_seconds:.1f}s")
+                        with col2:
+                            st.metric("Size", f"{extracted_clip.file_size_mb:.1f} MB")
+                        with col3:
+                            if optimization_result.success:
+                                st.metric("Compression", f"{optimization_result.compression_ratio:.1f}x")
+                        
+                        # Auto-refresh to show results
+                        st.rerun()
+                        
+                    else:
+                        st.error("❌ Clip extraction failed. Please check the video and timing parameters.")
+                        if extraction_result.results:
+                            st.error(f"Error: {extraction_result.results[0].error_message}")
+                
+                except Exception as e:
+                    error_msg = str(e)
+                    if "ffmpeg" in error_msg.lower():
+                        st.error("❌ FFmpeg not found. Please install FFmpeg to extract clips:")
+                        st.code("# On macOS:\nbrew install ffmpeg\n\n# On Ubuntu/Debian:\nsudo apt update\nsudo apt install ffmpeg", language="bash")
+                    else:
+                        st.error(f"❌ Extraction failed: {error_msg}")
+                    logger.error(f"Clip extraction error: {e}")
+    
+    except Exception as e:
+        st.error(f"❌ Unexpected error during clip extraction: {str(e)}")
+        logger.error(f"Unexpected clip extraction error: {e}")
+
+
+def initialize_extraction_results():
+    """Initialize extraction results in session state if not present."""
+    if 'extraction_results' not in st.session_state:
+        st.session_state['extraction_results'] = []
+    if 'optimization_results' not in st.session_state:
+        st.session_state['optimization_results'] = []

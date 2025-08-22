@@ -117,6 +117,8 @@ class YouTubeDownloader(LoggerMixin):
             # Retry options
             'retries': 3,
             'fragment_retries': 3,
+            # SSL certificate handling
+            'nocheckcertificate': True,
             # Avoid problematic extractors
             'extractor_retries': 3,
         }
