@@ -423,7 +423,7 @@ def render_clean_recommendations(analysis_results):
         col_preview, col_info = st.columns([1, 1])
         
         with col_preview:
-            st.write("**🔍 Preview**")
+            # st.write("**🔍 Preview**")
             
             # Check if we have actual extracted clips for this recommendation
             extraction_results = st.session_state.get('extraction_results')
