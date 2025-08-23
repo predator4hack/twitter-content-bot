@@ -329,7 +329,7 @@ src/core/config.py ✅ (LLM provider settings)
 
 -   Full Groq API integration using `groq` Python client
 -   GroqAnalyzer class with async support
--   Llama3-8b-8192 model integration
+-   openai/gpt-oss-120b model integration
 -   Robust JSON response parsing (handles markdown formatting)
 -   Error handling and rate limit management
 -   Usage tracking and metadata collection

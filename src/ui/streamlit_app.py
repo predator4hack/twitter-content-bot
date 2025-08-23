@@ -8,6 +8,7 @@ including URL input, settings configuration, progress tracking, and result displ
 import streamlit as st
 import sys
 import time
+import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any
 import traceback
@@ -205,7 +206,21 @@ def process_video_workflow(url_input_result: Dict[str, Any]):
                 }
                 st.session_state['video_info'] = video_info
             
-            # Step 5: Complete processing
+            # Step 5: Transcribe video with Whisper
+            update_progress(progress_bar, status_text, 75, "🎙️ Transcribing audio with Whisper...")
+            transcription_result = transcribe_video_with_whisper(str(video_path))
+            st.session_state['transcription_result'] = transcription_result
+            
+            # Step 6: Analyze content with LLM
+            update_progress(progress_bar, status_text, 85, "🤖 Analyzing content with AI...")
+            analysis_results = analyze_content_with_llm(transcription_result)
+            st.session_state['analysis_results'] = analysis_results
+            
+            # Step 7: Extract clips based on LLM recommendations
+            update_progress(progress_bar, status_text, 95, "✂️ Extracting recommended clips...")
+            extract_clips_from_analysis(str(video_path), analysis_results)
+            
+            # Step 8: Complete processing
             update_progress(progress_bar, status_text, 100, "✅ Processing complete!")
             
             # Mark as processed
@@ -213,12 +228,7 @@ def process_video_workflow(url_input_result: Dict[str, Any]):
             st.session_state['processing'] = False
             
             # Display success message
-            st.success("🎉 Video processed successfully!")
-            
-            # Set demo analysis results and mark for auto-extraction
-            set_demo_analysis_results()
-            if video_path:
-                st.session_state['pending_extraction'] = str(video_path)
+            st.success("🎉 Video processing complete! Clips extracted and optimized.")
             
             # Trigger rerun to show results
             st.rerun()
@@ -244,90 +254,140 @@ def update_progress(progress_bar, status_text, progress: int, message: str):
     time.sleep(0.1)  # Small delay for visual feedback
 
 
-def set_demo_analysis_results():
-    """Set the demo analysis results in session state."""
-    demo_analysis = {
-        'content_type': 'educational',
-        'strategy': 'thought_leadership',
-        'recommendations': [
-            {
-                'start_time': '00:02:15',
-                'end_time': '00:03:00',
-                'reasoning': 'This segment contains a clear, actionable explanation that would resonate well with Twitter audiences. The speaker provides a concrete example that could spark engagement and discussion.',
-                'confidence': 87,
-                'hook_strength': 'high',
-                'keywords': ['productivity', 'tips', 'workflow']
-            },
-            {
-                'start_time': '00:05:30',
-                'end_time': '00:06:15',
-                'reasoning': 'Strong hook with an unexpected insight that challenges conventional thinking. The emotional appeal and practical value make this highly shareable content.',
-                'confidence': 92,
-                'hook_strength': 'high',
-                'keywords': ['innovation', 'mindset', 'success']
-            }
-        ]
-    }
-    st.session_state['analysis_results'] = demo_analysis
-
-
-def auto_extract_demo_clips(video_path: str):
-    """Automatically extract the 2 demo clips after video processing."""
+def transcribe_video_with_whisper(video_path: str):
+    """Transcribe video using Whisper."""
     try:
-        # Store video path for extraction
-        st.session_state['video_path'] = video_path
+        print(f"🔧 DEBUG: Starting Whisper transcription for: {video_path}")
         
-        # Sample recommendations - extract from beginning of video to ensure content exists
-        demo_recommendations = [
-            {
-                'start_time': '00:00:10',  # Start very early 
-                'end_time': '00:00:55',    # 45 second clip
-                'reasoning': 'This segment contains a clear, actionable explanation that would resonate well with Twitter audiences. The speaker provides a concrete example that could spark engagement and discussion.',
-                'confidence': 87,
-                'hook_strength': 'high',
-                'keywords': ['productivity', 'tips', 'workflow']
-            },
-            {
-                'start_time': '00:00:50',  # Start right after first clip ends
-                'end_time': '00:01:35',    # 45 second clip
-                'reasoning': 'Strong hook with an unexpected insight that challenges conventional thinking. The emotional appeal and practical value make this highly shareable content.',
-                'confidence': 92,
-                'hook_strength': 'high',
-                'keywords': ['innovation', 'mindset', 'success']
-            }
-        ]
+        from src.transcription.whisper_transcriber import WhisperTranscriber
         
-        # Initialize session state
-        if 'extraction_results' not in st.session_state or st.session_state['extraction_results'] is None:
+        # Initialize Whisper transcriber
+        transcriber = WhisperTranscriber(
+            model_size="base",  # Use base model for good speed/accuracy balance
+            device="auto"
+        )
+        
+        # Transcribe the video
+        transcription_result = transcriber.transcribe_file(video_path)
+        
+        print(f"🔧 DEBUG: Transcription completed - {len(transcription_result.segments)} segments")
+        print(f"🔧 DEBUG: Total duration: {transcription_result.duration:.1f}s")
+        
+        return transcription_result
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Transcription failed: {e}")
+        logger.error(f"Whisper transcription failed: {e}")
+        st.error(f"❌ Transcription failed: {str(e)}")
+        raise
+
+
+def analyze_content_with_llm(transcription_result):
+    """Analyze transcription with LLM to get clip recommendations."""
+    try:
+        print(f"🔧 DEBUG: Starting LLM analysis")
+        
+        from src.analyzer.llm_analyzer import LLMAnalyzerFactory
+        
+        # Create LLM analyzer - try different providers for SSL issues
+        from src.analyzer.llm_analyzer import LLMAnalyzerFactory
+        
+        # Get available providers and prefer Groq if available (fewer SSL issues)
+        available_providers = LLMAnalyzerFactory.get_available_providers()
+        print(f"🔧 DEBUG: Available LLM providers: {available_providers}")
+        
+        if "groq" in available_providers:
+            print(f"🔧 DEBUG: Using Groq provider (more reliable)")
+            analyzer = LLMAnalyzerFactory.create_analyzer("groq")
+        elif "gemini" in available_providers:
+            print(f"🔧 DEBUG: Using Gemini provider")
+            analyzer = LLMAnalyzerFactory.create_analyzer("gemini")
+        else:
+            raise ValueError("No LLM providers available - check API keys")
+        
+        # Analyze transcript for 2 clips
+        analysis_result = asyncio.run(analyzer.analyze_transcript(
+            transcription_result,
+            max_clips=2,
+            target_duration=50  # ~50 second clips
+        ))
+        
+        print(f"🔧 DEBUG: LLM analysis completed")
+        print(f"🔧 DEBUG: Content type: {analysis_result.content_type}")
+        print(f"🔧 DEBUG: Number of recommendations: {len(analysis_result.recommendations)}")
+        
+        # Convert to format expected by UI
+        analysis_data = {
+            'content_type': analysis_result.content_type.value,
+            'strategy': 'ai_recommended',
+            'recommendations': []
+        }
+        
+        for rec in analysis_result.recommendations:
+            analysis_data['recommendations'].append({
+                'start_time': rec.start_time,
+                'end_time': rec.end_time,
+                'reasoning': rec.reasoning,
+                'confidence': rec.confidence,
+                'hook_strength': rec.hook_strength.value,
+                'keywords': rec.keywords,
+                'sentiment': rec.sentiment
+            })
+        
+        print(f"🔧 DEBUG: Analysis data prepared for UI")
+        return analysis_data
+        
+    except Exception as e:
+        print(f"❌ DEBUG: LLM analysis failed: {e}")
+        logger.error(f"LLM analysis failed: {e}")
+        st.error(f"❌ AI analysis failed: {str(e)}")
+        raise
+
+
+def extract_clips_from_analysis(video_path: str, analysis_results: Dict[str, Any]):
+    """Extract clips based on LLM analysis results."""
+    try:
+        print(f"🔧 DEBUG: Starting clip extraction from analysis")
+        print(f"🔧 DEBUG: Video path: {video_path}")
+        print(f"🔧 DEBUG: Number of recommendations: {len(analysis_results.get('recommendations', []))}")
+        
+        # Initialize session state for results
+        if 'extraction_results' not in st.session_state:
             st.session_state['extraction_results'] = []
-        if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
+        if 'optimization_results' not in st.session_state:
             st.session_state['optimization_results'] = []
         
-        # Clear any existing results first
+        # Clear previous results
         st.session_state['extraction_results'] = []
         st.session_state['optimization_results'] = []
         
-        # Extract each clip with visible feedback
-        success_count = 0
-        for i, rec in enumerate(demo_recommendations):
+        # Extract each recommended clip
+        recommendations = analysis_results.get('recommendations', [])
+        for i, rec in enumerate(recommendations):
             try:
-                st.write(f"🎬 Extracting clip {i+1} from {rec['start_time']} to {rec['end_time']}...")
+                print(f"🔧 DEBUG: Extracting clip {i+1}: {rec['start_time']} to {rec['end_time']}")
+                
+                # Use the existing extraction function but don't trigger rerun
                 extract_single_clip_from_recommendation(rec, i)
-                success_count += 1
-                st.success(f"✅ Clip {i+1} extracted successfully!")
+                
+                print(f"✅ DEBUG: Clip {i+1} extracted successfully")
+                
             except Exception as clip_error:
+                print(f"❌ DEBUG: Failed to extract clip {i+1}: {clip_error}")
                 logger.error(f"Failed to extract clip {i+1}: {clip_error}")
-                st.error(f"❌ Failed to extract clip {i+1}: {str(clip_error)}")
                 continue
         
-        if success_count > 0:
-            st.success(f"🎉 Successfully extracted {success_count} clips!")
-        else:
-            st.error("❌ No clips were extracted successfully")
-                
+        final_count = len(st.session_state.get('extraction_results', []))
+        print(f"🔧 DEBUG: Extraction completed - {final_count} clips in session state")
+        
     except Exception as e:
-        logger.error(f"Auto-extraction failed: {e}")
-        st.error(f"❌ Auto-extraction failed: {str(e)}")
+        print(f"❌ DEBUG: Clip extraction from analysis failed: {e}")
+        logger.error(f"Clip extraction from analysis failed: {e}")
+        st.error(f"❌ Clip extraction failed: {str(e)}")
+        raise
+
+
+# Removed old demo functions - now using proper pipeline
 
 
 # Removed - simplified to show just success message
@@ -338,73 +398,38 @@ def render_ai_recommendations_section():
     
     st.header("🤖 AI Recommendations")
     
-    # Debug: Show session state info
-    # with st.expander("🔍 Debug Info", expanded=True):
-    #     st.write(f"- pending_extraction: {st.session_state.get('pending_extraction', 'None')}")
-    #     st.write(f"- extraction_in_progress: {st.session_state.get('extraction_in_progress', 'None')}")
-    #     st.write(f"- video_processed: {st.session_state.get('video_processed', 'None')}")
-    #     st.write(f"- video_path: {st.session_state.get('video_path', 'None')}")
-    #     st.write(f"- extraction_results count: {len(st.session_state.get('extraction_results', []))}")
-        
-    #     # Manual trigger button for testing
-    #     if st.button("🔧 Force Extract Clips (Debug)"):
-    #         video_path = st.session_state.get('video_path') or st.session_state.get('pending_extraction')
-    #         if video_path:
-    #             st.write(f"Attempting extraction with video path: {video_path}")
-    #             auto_extract_demo_clips(video_path)
-    #             st.rerun()
-    #         else:
-    #             st.error("No video path found for extraction")
-    
-    # Check for pending extraction and run it
-    if st.session_state.get('pending_extraction') and not st.session_state.get('extraction_in_progress'):
-        st.write("🔄 **Starting auto-extraction...**")
-        st.session_state['extraction_in_progress'] = True
-        video_path = st.session_state['pending_extraction']
-        
-        with st.spinner("🎬 Extracting recommended clips..."):
-            auto_extract_demo_clips(video_path)
-        
-        # Clear pending extraction
-        del st.session_state['pending_extraction']
-        st.session_state['extraction_in_progress'] = False
-        st.rerun()
-    
-    # Check if we have analysis results
+    # Check if we have analysis results from the pipeline
     analysis_results = st.session_state.get('analysis_results')
     
     if not analysis_results:
-        # Demo mode with sample analysis
-        st.info("🤖 AI will analyze your video and provide 2 clip recommendations with reasoning.")
-        
-        # Sample analysis demonstration
-        sample_analysis = {
-            'content_type': 'educational',
-            'strategy': 'thought_leadership',
-            'recommendations': [
-                {
-                    'start_time': '00:02:15',
-                    'end_time': '00:03:00',
-                    'reasoning': 'This segment contains a clear, actionable explanation that would resonate well with Twitter audiences. The speaker provides a concrete example that could spark engagement and discussion.',
-                    'confidence': 87,
-                    'hook_strength': 'high',
-                    'keywords': ['productivity', 'tips', 'workflow']
-                },
-                {
-                    'start_time': '00:05:30',
-                    'end_time': '00:06:15',
-                    'reasoning': 'Strong hook with an unexpected insight that challenges conventional thinking. The emotional appeal and practical value make this highly shareable content.',
-                    'confidence': 92,
-                    'hook_strength': 'high',
-                    'keywords': ['innovation', 'mindset', 'success']
-                }
-            ]
-        }
-        
-        render_clean_recommendations(sample_analysis)
+        st.info("🤖 Process a video to see AI-powered clip recommendations with reasoning.")
         return
     
-    # Render actual analysis results
+    # Show analysis summary
+    st.subheader("📊 Content Analysis Summary")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Content Type", analysis_results.get('content_type', 'Unknown').title())
+    
+    with col2:
+        recommendations = analysis_results.get('recommendations', [])
+        st.metric("Clips Recommended", len(recommendations))
+    
+    with col3:
+        if recommendations:
+            avg_confidence = sum(r.get('confidence', 0) for r in recommendations) / len(recommendations)
+            st.metric("Avg Confidence", f"{avg_confidence:.0f}%")
+    
+    # Show transcription info if available
+    transcription_result = st.session_state.get('transcription_result')
+    if transcription_result:
+        with st.expander("📝 Transcription Info"):
+            st.write(f"**Duration:** {transcription_result.duration:.1f} seconds")
+            st.write(f"**Language:** {transcription_result.language}")
+            st.write(f"**Segments:** {len(transcription_result.segments)}")
+    
+    # Render the recommendations
     render_clean_recommendations(analysis_results)
 
 
@@ -432,6 +457,7 @@ def render_clean_recommendations(analysis_results):
             has_actual_clip = (extraction_results and 
                              isinstance(extraction_results, list) and 
                              i < len(extraction_results) and 
+                             extraction_results[i] is not None and
                              extraction_results[i].success)
             
             if has_actual_clip:
@@ -471,10 +497,11 @@ def render_clean_recommendations(analysis_results):
                 has_optimized = (optimization_results and 
                                isinstance(optimization_results, list) and
                                i < len(optimization_results) and 
+                               optimization_results[i] is not None and
                                optimization_results[i].success and
                                Path(optimization_results[i].optimized_path).exists())
                 
-                if has_optimized:
+                if has_optimized and optimization_results[i] is not None:
                     with open(optimization_results[i].optimized_path, "rb") as file:
                         file_data = file.read()
                     st.download_button(
@@ -522,6 +549,15 @@ def render_clean_recommendations(analysis_results):
         
         if i < len(recommendations) - 1:
             st.divider()
+    
+    # Final debug summary
+    print(f"\n🔧 DEBUG: render_clean_recommendations completed")
+    print(f"🔧 DEBUG: Rendered {len(recommendations)} recommendation UI elements")
+    extraction_results = st.session_state.get('extraction_results', [])
+    print(f"🔧 DEBUG: Available clips in session state: {len(extraction_results)}")
+    for i, clip in enumerate(extraction_results):
+        if clip:
+            print(f"🔧 DEBUG: Clip {i+1}: {clip.clip_path} (exists: {Path(clip.clip_path).exists()})")
 
 
 def render_video_placeholder(rec):

@@ -651,7 +651,8 @@ def optimize_single_clip(
     input_path: str,
     output_path: Optional[str] = None,
     aspect_ratio: TwitterAspectRatio = TwitterAspectRatio.ORIGINAL,
-    quality: VideoQuality = VideoQuality.TWITTER_OPTIMIZED
+    resolution: TwitterResolution = TwitterResolution.HD_720P,
+    quality: VideoQuality = VideoQuality.HIGH
 ) -> OptimizationResult:
     """
     Optimize a single clip for Twitter - convenience function.
@@ -660,7 +661,8 @@ def optimize_single_clip(
         input_path: Path to input video
         output_path: Output file path (auto-generated if None)
         aspect_ratio: Target aspect ratio
-        quality: Quality preset
+        resolution: Target resolution (default: 720p)
+        quality: Quality preset (default: HIGH)
         
     Returns:
         OptimizationResult
@@ -673,7 +675,7 @@ def optimize_single_clip(
         input_path,
         output_filename,
         aspect_ratio,
-        TwitterResolution.AUTO,
+        resolution,
         quality
     )
 

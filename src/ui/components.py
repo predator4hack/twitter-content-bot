@@ -2159,9 +2159,14 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
         rec: LLM recommendation dictionary
         index: Index of the recommendation
     """
+    print(f"\n🔧 DEBUG: extract_single_clip_from_recommendation called")
+    print(f"  - Index: {index}")
+    print(f"  - Recommendation: {rec}")
+    
     try:
         # Get video path from session state
         video_path = st.session_state.get('video_path') or st.session_state.get('local_video_path')
+        print(f"🔧 DEBUG: Video path from session: {video_path}")
         
         # If no video path, try to download the video
         if not video_path:
@@ -2184,9 +2189,12 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
                     return
         
         # Validate video file exists
+        print(f"🔧 DEBUG: Checking if video file exists: {video_path}")
         if not Path(video_path).exists():
+            print(f"❌ DEBUG: Video file not found: {video_path}")
             st.error(f"❌ Video file not found: {video_path}")
             return
+        print(f"✅ DEBUG: Video file exists: {video_path}")
         
         # Extract timing information
         start_time = rec.get('start_time', '00:00:00')
@@ -2238,10 +2246,14 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
                     st.info(f"⏰ Extracting clip from {start_time} to {end_time}")
                     
                     # Extract the clip
+                    print(f"🔧 DEBUG: Calling clip extractor for clip {index + 1}")
                     extraction_result = clip_extractor.extract_clips_from_recommendations(
                         source_video=str(video_path),
                         recommendations=[clip_recommendation]
                     )
+                    
+                    print(f"🔧 DEBUG: Extraction result: {extraction_result}")
+                    print(f"🔧 DEBUG: Number of results: {len(extraction_result.results) if extraction_result.results else 0}")
                     
                     if extraction_result.results and extraction_result.results[0].success:
                         extracted_clip = extraction_result.results[0]
@@ -2253,9 +2265,10 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
                                 output_dir=optimized_dir
                             )
                             
-                            from src.clipper.twitter_optimizer import VideoQuality
+                            from src.clipper.twitter_optimizer import VideoQuality, TwitterResolution
                             optimization_result = twitter_optimizer.optimize_for_twitter(
                                 input_path=extracted_clip.clip_path,
+                                resolution=TwitterResolution.HD_720P,  # Force 720p quality
                                 quality=VideoQuality.HIGH
                             )
                         
@@ -2266,11 +2279,27 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
                         if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
                             st.session_state['optimization_results'] = []
                         
-                        # Add to results
-                        st.session_state['extraction_results'].append(extracted_clip)
+                        # Add to results - ensure we don't duplicate
+                        print(f"🔧 DEBUG: Adding extracted clip to session state")
+                        print(f"🔧 DEBUG: Clip path: {extracted_clip.clip_path}")
+                        print(f"🔧 DEBUG: Current extraction_results count: {len(st.session_state['extraction_results'])}")
+                        
+                        if not any(r.clip_path == extracted_clip.clip_path for r in st.session_state['extraction_results']):
+                            st.session_state['extraction_results'].append(extracted_clip)
+                            print(f"🔧 DEBUG: Added clip to extraction_results. New count: {len(st.session_state['extraction_results'])}")
+                        else:
+                            print(f"🔧 DEBUG: Clip already exists in extraction_results, skipping")
                         
                         if optimization_result.success:
-                            st.session_state['optimization_results'].append(optimization_result)
+                            print(f"🔧 DEBUG: Adding optimized clip to session state")
+                            print(f"🔧 DEBUG: Optimized path: {optimization_result.optimized_path}")
+                            print(f"🔧 DEBUG: Current optimization_results count: {len(st.session_state['optimization_results'])}")
+                            
+                            if not any(r.optimized_path == optimization_result.optimized_path for r in st.session_state['optimization_results']):
+                                st.session_state['optimization_results'].append(optimization_result)
+                                print(f"🔧 DEBUG: Added optimized clip to optimization_results. New count: {len(st.session_state['optimization_results'])}")
+                            else:
+                                print(f"🔧 DEBUG: Optimized clip already exists in optimization_results, skipping")
                         
                         # Show success message
                         st.success(f"✅ Clip {index + 1} extracted successfully!")
@@ -2288,8 +2317,8 @@ def extract_single_clip_from_recommendation(rec: Dict[str, Any], index: int) -> 
                             if optimization_result.success:
                                 st.metric("Compression", f"{optimization_result.compression_ratio:.1f}x")
                         
-                        # Auto-refresh to show results
-                        st.rerun()
+                        # Don't rerun here - let the batch process complete first
+                        print(f"🔧 DEBUG: Clip {index + 1} extraction completed, not triggering rerun")
                         
                     else:
                         st.error("❌ Clip extraction failed. Please check the video and timing parameters.")

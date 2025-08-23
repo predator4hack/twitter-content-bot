@@ -307,7 +307,7 @@ class TestGroqAnalyzer:
         # Verify API call
         mock_client.chat.completions.create.assert_called_once()
         call_args = mock_client.chat.completions.create.call_args
-        assert call_args[1]['model'] == "llama3-8b-8192"
+        assert call_args[1]['model'] == "openai/gpt-oss-120b"
         assert call_args[1]['temperature'] == 0.3
 
 

@@ -61,7 +61,15 @@ class WhisperTranscriber(BaseTranscriber):
         self.model_size = model_size
         self.device = device if device != "auto" else self._detect_device()
         self.compute_type = compute_type if compute_type != "auto" else self._detect_compute_type()
-        self.download_root = download_root or os.path.join(Path.home(), ".cache", "whisper")
+        # Use project-local cache directory for better control
+        if download_root:
+            self.download_root = download_root
+        else:
+            # Store models in project directory for persistence
+            project_root = Path(__file__).parent.parent.parent
+            self.download_root = str(project_root / "models" / "whisper")
+            Path(self.download_root).mkdir(parents=True, exist_ok=True)
+        
         self.local_files_only = local_files_only
         
         self.model: Optional[WhisperModel] = None
@@ -93,12 +101,34 @@ class WhisperTranscriber(BaseTranscriber):
         try:
             logger.info(f"Loading Whisper model: {self.model_size}")
             
-            # Ensure model is downloaded if needed
+            # Check if model already exists locally
+            model_path = Path(self.download_root) / self.model_size
+            model_exists = model_path.exists() and any(model_path.iterdir())
+            
+            if model_exists:
+                logger.info(f"Found existing model at: {model_path}")
+                # Try to use local model first
+                try:
+                    self.model = WhisperModel(
+                        self.model_size,
+                        device=self.device,
+                        compute_type=self.compute_type,
+                        download_root=self.download_root,
+                        local_files_only=True  # Use local only first
+                    )
+                    logger.info(f"Successfully loaded cached model: {self.model_size}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Failed to load cached model: {e}. Will try downloading.")
+            
+            # Download model if needed
             if not self.local_files_only:
+                logger.info(f"Downloading Whisper model: {self.model_size}")
                 try:
                     download_model(self.model_size, cache_dir=self.download_root)
+                    logger.info(f"Successfully downloaded model to: {self.download_root}")
                 except Exception as e:
-                    logger.warning(f"Failed to download model: {e}. Trying to use local files.")
+                    logger.warning(f"Failed to download model: {e}. Trying to use any local files.")
             
             # Load the model
             self.model = WhisperModel(
@@ -109,7 +139,7 @@ class WhisperTranscriber(BaseTranscriber):
                 local_files_only=self.local_files_only
             )
             
-            logger.info(f"Successfully loaded Whisper model: {self.model_size}")
+            logger.info(f"Successfully loaded Whisper model: {self.model_size} from {self.download_root}")
             
         except Exception as e:
             logger.error(f"Failed to load Whisper model: {e}")
