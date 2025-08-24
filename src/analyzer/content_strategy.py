@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional, Set, Any
 
-from .llm_analyzer import AnalysisResult, ClipRecommendation, ContentType, HookStrength
+from .llm_analyzer import AnalysisResult, ClipRecommendation, ContentType, HookStrength, TwitterThread, ThreadTweet
 
 logger = logging.getLogger(__name__)
 
@@ -428,3 +428,304 @@ class ContentStrategy:
             "sentiment_variety": len(set(clip.sentiment for clip in clips)),
             "recommendations": recommendations
         }
+
+
+class ThreadStrategy:
+    """
+    Content strategy specifically for Twitter thread generation.
+    
+    Provides content-type aware strategies for creating engaging threads
+    that explain video content in simple, digestible formats.
+    """
+    
+    # Thread templates for different content types
+    THREAD_TEMPLATES = {
+        ContentType.EDUCATIONAL: {
+            "hook_patterns": [
+                "🧵 {title} breaks down {topic} in a way that actually makes sense. Here's what you need to know:",
+                "🧵 I just learned {insight} from {title}. This changes everything:",
+                "🧵 {title} explains {topic} better than any textbook. Key takeaways:"
+            ],
+            "structure": "problem → solution → examples → takeaways",
+            "tone": "explanatory",
+            "max_tweets": 6,
+            "hashtag_strategy": "educational"
+        },
+        ContentType.INTERVIEW: {
+            "hook_patterns": [
+                "🧵 {guest} just revealed {surprising_fact} in {title}. This is huge:",
+                "🧵 The most interesting insights from {guest}'s interview:",
+                "🧵 {guest} shared {number} game-changing insights. Thread:"
+            ],
+            "structure": "setup → key insights → surprising revelations → implications",
+            "tone": "conversational",
+            "max_tweets": 5,
+            "hashtag_strategy": "personality"
+        },
+        ContentType.TUTORIAL: {
+            "hook_patterns": [
+                "🧵 {title} shows the exact steps to {goal}. Here's the process:",
+                "🧵 This {duration}-minute tutorial just saved me hours. Step-by-step:",
+                "🧵 {title} breaks down {skill} into {number} simple steps:"
+            ],
+            "structure": "goal → prerequisites → steps → results → tips",
+            "tone": "instructional",
+            "max_tweets": 6,
+            "hashtag_strategy": "howto"
+        },
+        ContentType.REVIEW: {
+            "hook_patterns": [
+                "🧵 {title} tested {product} so you don't have to. Here's the verdict:",
+                "🧵 Honest review of {product} after {timeframe}:",
+                "🧵 {title}'s review of {product} covers everything. Key points:"
+            ],
+            "structure": "overview → pros → cons → verdict → recommendation",
+            "tone": "analytical",
+            "max_tweets": 5,
+            "hashtag_strategy": "review"
+        },
+        ContentType.ENTERTAINMENT: {
+            "hook_patterns": [
+                "🧵 {title} had me rolling. Best moments:",
+                "🧵 This {duration}-minute video is pure gold. Highlights:",
+                "🧵 {title} just became my new favorite. Here's why:"
+            ],
+            "structure": "setup → highlights → funniest moments → reaction",
+            "tone": "enthusiastic",
+            "max_tweets": 4,
+            "hashtag_strategy": "entertainment"
+        },
+        ContentType.NEWS: {
+            "hook_patterns": [
+                "🧵 {title} covers {topic} developments. What you need to know:",
+                "🧵 Important updates on {topic} from {title}:",
+                "🧵 {title} explains the {topic} situation clearly. Key facts:"
+            ],
+            "structure": "headline → context → key facts → implications → sources",
+            "tone": "factual",
+            "max_tweets": 5,
+            "hashtag_strategy": "news"
+        }
+    }
+    
+    # Hashtag strategies for different content types
+    HASHTAG_STRATEGIES = {
+        "educational": ["#learning", "#education", "#knowledge", "#tips"],
+        "personality": ["#interview", "#insights", "#conversation"],
+        "howto": ["#tutorial", "#howto", "#guide", "#tips"],
+        "review": ["#review", "#honest", "#verdict"],
+        "entertainment": ["#funny", "#viral", "#entertainment"],
+        "news": ["#news", "#update", "#breaking", "#facts"]
+    }
+    
+    # Thread flow patterns for different content types
+    THREAD_FLOWS = {
+        ContentType.EDUCATIONAL: [
+            "Hook with main insight",
+            "Explain the problem/context", 
+            "Present the solution/method",
+            "Give practical examples",
+            "Share key takeaways",
+            "Link to video + call-to-action"
+        ],
+        ContentType.INTERVIEW: [
+            "Hook with most surprising insight",
+            "Context about the guest/topic",
+            "Key insight #1 with quote",
+            "Key insight #2 with context", 
+            "Link to full interview"
+        ],
+        ContentType.TUTORIAL: [
+            "Hook with end result/benefit",
+            "Prerequisites/what you need",
+            "Step 1-2 simplified",
+            "Step 3-4 with tips",
+            "Final result + pro tips",
+            "Link to full tutorial"
+        ]
+    }
+    
+    @classmethod
+    def get_thread_strategy(cls, content_type: ContentType) -> Dict[str, Any]:
+        """
+        Get the thread strategy for a specific content type.
+        
+        Args:
+            content_type: The type of content to generate strategy for
+            
+        Returns:
+            Strategy configuration dictionary
+        """
+        return cls.THREAD_TEMPLATES.get(content_type, cls.THREAD_TEMPLATES[ContentType.EDUCATIONAL])
+    
+    @classmethod
+    def generate_hook_suggestions(
+        cls, 
+        content_type: ContentType, 
+        video_title: str,
+        key_insights: List[str]
+    ) -> List[str]:
+        """
+        Generate hook tweet suggestions based on content type and insights.
+        
+        Args:
+            content_type: Type of content
+            video_title: Title of the video
+            key_insights: List of key insights from the video
+            
+        Returns:
+            List of suggested hook tweets
+        """
+        strategy = cls.get_thread_strategy(content_type)
+        patterns = strategy["hook_patterns"]
+        
+        suggestions = []
+        for pattern in patterns:
+            # Extract placeholders and try to fill them
+            if "{title}" in pattern:
+                # Use simplified title
+                simplified_title = video_title[:50] + "..." if len(video_title) > 50 else video_title
+                pattern = pattern.replace("{title}", simplified_title)
+            
+            if "{topic}" in pattern and key_insights:
+                # Use first key insight as topic
+                topic = key_insights[0][:30] + "..." if len(key_insights[0]) > 30 else key_insights[0]
+                pattern = pattern.replace("{topic}", topic)
+            
+            if "{insight}" in pattern and key_insights:
+                insight = key_insights[0][:40] + "..." if len(key_insights[0]) > 40 else key_insights[0]
+                pattern = pattern.replace("{insight}", insight)
+            
+            if "{number}" in pattern:
+                pattern = pattern.replace("{number}", str(min(len(key_insights), 5)))
+            
+            suggestions.append(pattern)
+        
+        return suggestions
+    
+    @classmethod
+    def optimize_thread_structure(cls, thread: TwitterThread) -> TwitterThread:
+        """
+        Optimize thread structure based on content type and best practices.
+        
+        Args:
+            thread: The original thread to optimize
+            
+        Returns:
+            Optimized TwitterThread
+        """
+        if not thread.tweets:
+            return thread
+        
+        strategy = cls.get_thread_strategy(thread.content_type)
+        max_tweets = strategy["max_tweets"]
+        
+        # Ensure thread doesn't exceed max tweets for content type
+        if len(thread.tweets) > max_tweets:
+            # Keep hook, most important middle tweets, and conclusion
+            optimized_tweets = [thread.tweets[0]]  # Hook
+            
+            # Select most important middle tweets
+            middle_tweets = thread.tweets[1:-1]
+            if middle_tweets:
+                # Simple selection: take evenly spaced tweets
+                step = max(1, len(middle_tweets) // (max_tweets - 2))
+                selected_middle = middle_tweets[::step][:max_tweets-2]
+                optimized_tweets.extend(selected_middle)
+            
+            # Keep conclusion if it exists
+            if len(thread.tweets) > 1:
+                optimized_tweets.append(thread.tweets[-1])
+            
+            # Update tweet numbers
+            for i, tweet in enumerate(optimized_tweets, 1):
+                tweet.tweet_number = i
+            
+            # Create optimized thread
+            thread.tweets = optimized_tweets
+            thread.total_tweets = len(optimized_tweets)
+            thread.hook_tweet = optimized_tweets[0]
+        
+        return thread
+    
+    @classmethod
+    def add_strategic_hashtags(cls, thread: TwitterThread) -> TwitterThread:
+        """
+        Add strategic hashtags to thread tweets based on content type.
+        
+        Args:
+            thread: Thread to add hashtags to
+            
+        Returns:
+            Thread with strategic hashtags added
+        """
+        strategy = cls.get_thread_strategy(thread.content_type)
+        hashtag_type = strategy["hashtag_strategy"]
+        available_hashtags = cls.HASHTAG_STRATEGIES.get(hashtag_type, [])
+        
+        for i, tweet in enumerate(thread.tweets):
+            # Add hashtags strategically
+            if i == 0:  # Hook tweet gets primary hashtags
+                primary_hashtags = available_hashtags[:2]
+                tweet.hashtags.extend(primary_hashtags)
+            elif i == len(thread.tweets) - 1:  # Last tweet gets video/watch hashtags
+                tweet.hashtags.extend(["#watch", "#video"])
+            else:  # Middle tweets get relevant hashtags sparingly
+                if len(available_hashtags) > 2:
+                    tweet.hashtags.append(available_hashtags[i % len(available_hashtags)])
+            
+            # Remove duplicates while preserving order
+            tweet.hashtags = list(dict.fromkeys(tweet.hashtags))
+            
+            # Ensure hashtags don't make tweet too long
+            hashtag_text = " ".join(tweet.hashtags)
+            if len(tweet.content) + len(hashtag_text) + 1 > 280:
+                # Remove hashtags until it fits
+                while tweet.hashtags and len(tweet.content) + len(" ".join(tweet.hashtags)) + 1 > 280:
+                    tweet.hashtags.pop()
+        
+        return thread
+    
+    @classmethod
+    def validate_thread_flow(cls, thread: TwitterThread) -> List[str]:
+        """
+        Validate that the thread follows good flow principles.
+        
+        Args:
+            thread: Thread to validate
+            
+        Returns:
+            List of validation issues (empty if valid)
+        """
+        issues = []
+        
+        if not thread.tweets:
+            return ["Thread has no tweets"]
+        
+        # Check hook tweet
+        hook = thread.tweets[0]
+        if not any(indicator in hook.content for indicator in ["🧵", "Thread:", "thread"]):
+            issues.append("Hook tweet should clearly indicate it's a thread")
+        
+        if len(hook.content) < 50:
+            issues.append("Hook tweet might be too short to be engaging")
+        
+        # Check thread progression
+        if len(thread.tweets) > 1:
+            # Check if tweets build logically
+            for i in range(1, len(thread.tweets)):
+                tweet = thread.tweets[i]
+                if len(tweet.content.strip()) < 20:
+                    issues.append(f"Tweet {i+1} seems too short")
+                
+                # Check for numbering consistency
+                if f"{i+1}/" not in tweet.content and i < len(thread.tweets) - 1:
+                    issues.append(f"Tweet {i+1} should include thread numbering")
+        
+        # Check conclusion
+        if len(thread.tweets) > 1:
+            last_tweet = thread.tweets[-1]
+            if thread.video_url and thread.video_url not in last_tweet.content:
+                issues.append("Last tweet should include video link")
+        
+        return issues

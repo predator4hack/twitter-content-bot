@@ -105,6 +105,62 @@ class ClipRecommendation:
 
 
 @dataclass
+class ThreadTweet:
+    """
+    Represents a single tweet in a Twitter thread.
+    
+    Attributes:
+        content: The tweet text content
+        tweet_number: Position in the thread (1-indexed)
+        character_count: Number of characters in the tweet
+        hashtags: List of hashtags used in the tweet
+        mentions: List of user mentions in the tweet
+    """
+    content: str
+    tweet_number: int
+    character_count: int
+    hashtags: List[str] = None
+    mentions: List[str] = None
+    
+    def __post_init__(self):
+        """Post-initialization to set defaults and calculate character count."""
+        if self.hashtags is None:
+            self.hashtags = []
+        if self.mentions is None:
+            self.mentions = []
+        self.character_count = len(self.content)
+
+
+@dataclass 
+class TwitterThread:
+    """
+    Represents a complete Twitter thread.
+    
+    Attributes:
+        tweets: List of all tweets in the thread
+        hook_tweet: The first tweet that serves as the hook
+        total_tweets: Total number of tweets in the thread
+        estimated_reading_time: Estimated time to read the thread (seconds)
+        reasoning: Explanation for the thread structure and content
+        content_type: Type of content the thread is based on
+        video_url: Optional URL to the original video
+    """
+    tweets: List[ThreadTweet]
+    hook_tweet: ThreadTweet
+    total_tweets: int
+    estimated_reading_time: int
+    reasoning: str
+    content_type: ContentType
+    video_url: Optional[str] = None
+    
+    def __post_init__(self):
+        """Post-initialization to set hook_tweet and validate structure."""
+        if self.tweets:
+            self.hook_tweet = self.tweets[0]
+            self.total_tweets = len(self.tweets)
+
+
+@dataclass
 class AnalysisResult:
     """
     Complete analysis result for a video transcript.

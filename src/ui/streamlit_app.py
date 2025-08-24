@@ -6,12 +6,14 @@ including URL input, settings configuration, progress tracking, and result displ
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import sys
 import time
 import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any
 import traceback
+import html
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -101,6 +103,10 @@ def main():
     if st.session_state.get('video_processed', False):
         st.divider()
         render_ai_recommendations_section()
+        
+        # Twitter Thread Generation Section
+        st.divider()
+        render_twitter_thread_section()
 
 
 def render_file_upload_section():
@@ -211,6 +217,7 @@ def process_video_workflow(url_input_result: Dict[str, Any]):
             transcription_result = transcribe_video_with_whisper(str(video_path))
             st.session_state['transcription_result'] = transcription_result
             
+            # TODO: Choose model option in UI
             # Step 6: Analyze content with LLM
             update_progress(progress_bar, status_text, 85, "🤖 Analyzing content with AI...")
             analysis_results = analyze_content_with_llm(transcription_result)
@@ -589,6 +596,309 @@ def render_video_placeholder(rec):
 
 
 # Removed - analytics functionality simplified
+
+
+def render_twitter_thread_section():
+    """Render Twitter thread generation section."""
+    
+    st.header("🧵 Twitter Thread Generator")
+    
+    # Check if we have the required data
+    transcription_result = st.session_state.get('transcription_result')
+    video_info = st.session_state.get('video_info', {})
+    
+    if not transcription_result:
+        st.info("🎙️ Process a video to generate Twitter threads from the transcript.")
+        return
+    
+    # Thread generation info
+    st.info("🤖 The AI will automatically determine the optimal thread length (3-6 tweets) and tone based on the video content.")
+    
+    # Generate thread button
+    if st.button("🧵 Generate Twitter Thread", type="primary", use_container_width=True):
+        generate_twitter_thread(transcription_result, video_info)
+    
+    # Show generated thread if available
+    if st.session_state.get('twitter_thread'):
+        render_thread_preview()
+
+
+def generate_twitter_thread(transcription_result, video_info):
+    """Generate a Twitter thread from the transcript."""
+    
+    try:
+        with st.spinner("🧵 Generating Twitter thread..."):
+            print(f"🧵 DEBUG: Starting thread generation")
+            
+            from src.analyzer.thread_generator import TwitterThreadGenerator
+            
+            # Initialize thread generator
+            generator = TwitterThreadGenerator()
+            
+            # Get video details
+            video_title = video_info.get('title', 'Interesting Video')
+            video_url = video_info.get('webpage_url', None)
+            
+            # Let AI decide optimal thread length and tone based on content
+            # Set audience to general/beginners as requested
+            thread = asyncio.run(generator.generate_thread(
+                transcript=transcription_result,
+                video_title=video_title,
+                video_url=video_url,
+                target_length=5,  # Default suggestion, but LLM can override
+                tone="educational",  # Default, but LLM will adapt based on content
+                target_audience="general"  # Set to general/beginners as requested
+            ))
+            
+            # Store in session state
+            st.session_state['twitter_thread'] = thread
+            
+            print(f"🧵 DEBUG: Thread generated successfully with {len(thread.tweets)} tweets")
+            st.success(f"✅ Twitter thread generated with {len(thread.tweets)} tweets!")
+            st.rerun()
+            
+    except Exception as e:
+        print(f"❌ DEBUG: Thread generation failed: {e}")
+        st.error(f"❌ Thread generation failed: {str(e)}")
+
+
+def copy_to_clipboard(text, button_id):
+    """Create JavaScript code to copy text to clipboard."""
+    # Escape the text for JavaScript
+    escaped_text = html.escape(text).replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")
+    
+    javascript_code = f"""
+    <script>
+    function copyToClipboard_{button_id}() {{
+        const text = '{escaped_text}';
+        
+        // Try modern clipboard API first
+        if (navigator.clipboard && window.isSecureContext) {{
+            navigator.clipboard.writeText(text).then(function() {{
+                // Show success feedback
+                const button = document.getElementById('copy_button_{button_id}');
+                if (button) {{
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '✅ Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    setTimeout(function() {{
+                        button.innerHTML = originalText;
+                        button.style.backgroundColor = '';
+                    }}, 2000);
+                }}
+            }}).catch(function(err) {{
+                console.error('Clipboard API failed: ', err);
+                fallbackCopy_{button_id}(text);
+            }});
+        }} else {{
+            fallbackCopy_{button_id}(text);
+        }}
+    }}
+    
+    function fallbackCopy_{button_id}(text) {{
+        // Fallback for older browsers or non-secure contexts
+        const dummy = document.createElement('textarea');
+        document.body.appendChild(dummy);
+        dummy.value = text;
+        dummy.select();
+        dummy.setSelectionRange(0, 99999); // For mobile devices
+        
+        try {{
+            const successful = document.execCommand('copy');
+            if (successful) {{
+                const button = document.getElementById('copy_button_{button_id}');
+                if (button) {{
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '✅ Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    setTimeout(function() {{
+                        button.innerHTML = originalText;
+                        button.style.backgroundColor = '';
+                    }}, 2000);
+                }}
+            }}
+        }} catch (err) {{
+            console.error('Fallback copy failed: ', err);
+            alert('Copy failed. Please select and copy manually.');
+        }}
+        
+        document.body.removeChild(dummy);
+    }}
+    </script>
+    
+    <button id="copy_button_{button_id}" onclick="copyToClipboard_{button_id}()" 
+            style="background: #ff4b4b; color: white; border: none; padding: 5px 10px; 
+                   border-radius: 3px; cursor: pointer; font-size: 12px;">
+        📋 Copy
+    </button>
+    """
+    
+    return javascript_code
+
+
+def render_thread_preview():
+    """Render the generated Twitter thread with preview and editing."""
+    
+    thread = st.session_state.get('twitter_thread')
+    if not thread:
+        return
+    
+    st.subheader("🧵 Generated Twitter Thread")
+    
+    # Thread summary
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Tweets", thread.total_tweets)
+    
+    with col2:
+        st.metric("Reading Time", f"{thread.estimated_reading_time}s")
+    
+    with col3:
+        st.metric("Content Type", thread.content_type.value.title())
+    
+    with col4:
+        # Copy entire thread to clipboard
+        full_thread_text = "\n\n".join([tweet.content for tweet in thread.tweets])
+        copy_full_thread_html = copy_to_clipboard(full_thread_text, "full_thread")
+        components.html(copy_full_thread_html, height=50)
+    
+    # Show reasoning
+    with st.expander("🧠 AI Reasoning"):
+        st.write(thread.reasoning)
+    
+    # Individual tweet preview and editing
+    st.write("**Tweet Preview:**")
+    
+    for i, tweet in enumerate(thread.tweets):
+        # Create two columns: one for tweet header, one for copy button
+        col_header, col_copy = st.columns([4, 1])
+        
+        with col_header:
+            st.write(f"**Tweet {tweet.tweet_number}:**")
+        
+        # Create editable text area for each tweet
+        edited_content = st.text_area(
+            f"Edit Tweet {tweet.tweet_number}",
+            value=tweet.content,
+            max_chars=280,
+            height=80,
+            key=f"tweet_edit_{i}",
+            help=f"Characters: {len(tweet.content)}/280"
+        )
+        
+        # Use the edited content if available, otherwise use original
+        current_content = edited_content if edited_content else tweet.content
+        
+        # Add the JavaScript copy button
+        with col_copy:
+            copy_button_html = copy_to_clipboard(current_content, f"tweet_{i}")
+            components.html(copy_button_html, height=50)
+        
+        # Update the tweet content if edited
+        if edited_content != tweet.content:
+            tweet.content = edited_content
+            tweet.character_count = len(edited_content or "")
+        
+        # Show character count with color coding
+        char_count = len(edited_content or "")
+        if char_count > 280:
+            st.error(f"⚠️ Too long: {char_count}/280 characters")
+        elif char_count > 250:
+            st.warning(f"⚡ Almost full: {char_count}/280 characters")
+        else:
+            st.success(f"✅ Good length: {char_count}/280 characters")
+        
+        # Show hashtags and mentions if any
+        if tweet.hashtags or tweet.mentions:
+            hashtag_text = " ".join(tweet.hashtags) if tweet.hashtags else ""
+            mention_text = " ".join(tweet.mentions) if tweet.mentions else ""
+            if hashtag_text or mention_text:
+                st.caption(f"Tags: {hashtag_text} {mention_text}")
+        
+        if i < len(thread.tweets) - 1:
+            st.write("---")
+    
+    # Export options
+    st.write("**Export Options:**")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Plain text export
+        thread_text = format_thread_for_export(thread)
+        st.download_button(
+            label="📄 Download as Text",
+            data=thread_text,
+            file_name=f"twitter_thread_{int(time.time())}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    with col2:
+        # JSON export with full data
+        thread_json = format_thread_as_json(thread)
+        st.download_button(
+            label="📊 Download as JSON",
+            data=thread_json,
+            file_name=f"twitter_thread_{int(time.time())}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col3:
+        # Regenerate button
+        if st.button("🔄 Regenerate", use_container_width=True):
+            # Clear current thread and trigger regeneration
+            del st.session_state['twitter_thread']
+            st.rerun()
+
+
+def format_thread_for_export(thread):
+    """Format the thread for text export."""
+    lines = [f"Twitter Thread - {thread.content_type.value.title()} Content\n"]
+    lines.append("=" * 50)
+    lines.append("")
+    
+    for tweet in thread.tweets:
+        lines.append(f"Tweet {tweet.tweet_number}:")
+        lines.append(tweet.content)
+        if tweet.hashtags:
+            lines.append(f"Hashtags: {' '.join(tweet.hashtags)}")
+        lines.append("")
+    
+    lines.append("---")
+    lines.append(f"Generated by YouTube to Twitter Clipper")
+    lines.append(f"Reading time: {thread.estimated_reading_time} seconds")
+    lines.append(f"Video URL: {thread.video_url or 'N/A'}")
+    
+    return "\n".join(lines)
+
+
+def format_thread_as_json(thread):
+    """Format the thread as JSON export."""
+    import json
+    
+    thread_data = {
+        "content_type": thread.content_type.value,
+        "total_tweets": thread.total_tweets,
+        "estimated_reading_time": thread.estimated_reading_time,
+        "reasoning": thread.reasoning,
+        "video_url": thread.video_url,
+        "tweets": []
+    }
+    
+    for tweet in thread.tweets:
+        tweet_data = {
+            "tweet_number": tweet.tweet_number,
+            "content": tweet.content,
+            "character_count": tweet.character_count,
+            "hashtags": tweet.hashtags,
+            "mentions": tweet.mentions
+        }
+        thread_data["tweets"].append(tweet_data)
+    
+    return json.dumps(thread_data, indent=2)
 
 
 def render_debug_section():
