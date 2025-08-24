@@ -4,7 +4,51 @@
 
 An intelligent application that automatically extracts the most engaging clips from YouTube videos and optimizes them for Twitter. The app uses advanced content analysis to identify "catchy" moments that maximize viewer engagement across different video types (tutorials, vlogs, educational content, entertainment).
 
-## 🏗️ Recommended Architecture (MVP - Lightweight)
+#### 🚀 Getting Started (MVP)
+
+###6. **Test with sample videos** to validate the pipeline 7. **Iterate based on LLM recommendations**
+
+### Deploying to Streamlit Cloud
+
+For deployment to Streamlit Cloud, the project includes:
+
+1. **`packages.txt`** - System dependencies (FFmpeg) that Streamlit will install
+2. **`requirements.txt`** - Python package dependencies
+3. **`.env.example`** - Template for environment variables
+
+**Deployment Steps:**
+
+1. Push your code to GitHub
+2. Connect your GitHub repo to [Streamlit Cloud](https://share.streamlit.io/)
+3. Add your API keys as secrets in Streamlit Cloud settings:
+    - `GROQ_API_KEY` or `GOOGLE_API_KEY`
+    - Any other environment variables from `.env`
+4. Deploy! Streamlit will automatically install system dependencies from `packages.txt`rerequisites
+5. **Install system dependencies** (see System Requirements above)
+    ```bash
+    # Ubuntu/Debian
+    sudo apt update && sudo apt install -y ffmpeg
+    ```
+
+### Installation Steps
+
+1. **Clone the repository** and install Python dependencies
+    ```bash
+    git clone <your-repo-url>
+    cd twitter-content
+    pip install -r requirements.txt
+    ```
+2. **Set up API keys** for Gemini or Groq in `.env` file
+3. **Install additional packages** if needed:
+    ```bash
+    pip install av faster-whisper
+    ```
+4. **Run the Streamlit app**:
+    ```bash
+    streamlit run src/ui/streamlit_app.py
+    ```
+5. **Test with sample videos** to validate the pipeline
+6. **Iterate based on LLM recommendations**ommended Architecture (MVP - Lightweight)
 
 ### Core Technology Stack
 
@@ -391,7 +435,50 @@ if st.button("Extract Clips"):
 -   **User retention**: Return usage of the application
 -   **Content creator adoption**: Usage by content creators
 
-## 🚀 Getting Started (MVP)
+## � System Requirements & Dependencies
+
+### System Dependencies
+
+Before installing Python packages, ensure these system-level dependencies are installed:
+
+#### Ubuntu/Debian
+
+```bash
+# Install FFmpeg for video processing
+sudo apt update && sudo apt install -y ffmpeg
+
+# Optional: Install additional codecs
+sudo apt install -y libavcodec-extra
+```
+
+#### macOS
+
+```bash
+# Using Homebrew
+brew install ffmpeg
+```
+
+#### Windows
+
+```bash
+# Using Chocolatey
+choco install ffmpeg
+
+# Or download from https://ffmpeg.org/download.html
+```
+
+### Python Dependencies
+
+The project uses the following main Python packages:
+
+-   `streamlit` - Web UI framework
+-   `yt-dlp` - YouTube video downloading
+-   `openai-whisper` or `faster-whisper` - Speech-to-text transcription
+-   `ffmpeg-python` - Video processing wrapper
+-   `google-generativeai` or `groq` - LLM analysis
+-   `av` (PyAV) - Audio/video manipulation
+
+## �🚀 Getting Started (MVP)
 
 1. **Clone the repository** and install minimal dependencies
 2. **Set up API keys** for Gemini or Groq in `.env` file

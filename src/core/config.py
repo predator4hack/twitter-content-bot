@@ -36,6 +36,8 @@ class Config:
     
     # Processing Settings
     WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "small")
+    WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "cpu")  # Force CPU to avoid CUDA issues
+    WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")  # CPU-optimized
     PARALLEL_PROCESSING: bool = os.getenv("PARALLEL_PROCESSING", "true").lower() == "true"
     MAX_CONCURRENT_CLIPS: int = int(os.getenv("MAX_CONCURRENT_CLIPS", "3"))
     

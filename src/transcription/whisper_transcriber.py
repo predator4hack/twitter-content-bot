@@ -58,9 +58,21 @@ class WhisperTranscriber(BaseTranscriber):
             raise ValueError(f"Unsupported model size: {model_size}. "
                            f"Supported models: {', '.join(self.SUPPORTED_MODELS)}")
         
+        # Import config here to avoid circular imports
+        from ..core.config import config
+        
         self.model_size = model_size
-        self.device = device if device != "auto" else self._detect_device()
-        self.compute_type = compute_type if compute_type != "auto" else self._detect_compute_type()
+        # Use config values if auto, otherwise use provided values
+        if device == "auto":
+            self.device = config.WHISPER_DEVICE  # Defaults to "cpu"
+        else:
+            self.device = device
+            
+        if compute_type == "auto":
+            self.compute_type = config.WHISPER_COMPUTE_TYPE  # Defaults to "int8"
+        else:
+            self.compute_type = compute_type
+            
         # Use project-local cache directory for better control
         if download_root:
             self.download_root = download_root
@@ -79,18 +91,25 @@ class WhisperTranscriber(BaseTranscriber):
     
     def _detect_device(self) -> str:
         """Detect the best available device for inference."""
-        try:
-            import torch
-            if torch.cuda.is_available():
-                return "cuda"
-        except ImportError:
-            pass
+        # Force CPU usage to avoid CUDA/cuDNN compatibility issues
+        # This is more reliable for deployment environments
         return "cpu"
+        
+        # Original code kept for reference:
+        # try:
+        #     import torch
+        #     if torch.cuda.is_available():
+        #         return "cuda"
+        # except ImportError:
+        #     pass
+        # return "cpu"
     
     def _detect_compute_type(self) -> str:
         """Detect the best compute type based on device."""
+        # For CPU usage, int8 is more efficient and doesn't require CUDA libraries
         if self.device == "cuda":
             return "float16"
+        # Use int8 for CPU - it's faster and more memory efficient
         return "int8"
     
     def _load_model(self) -> None:

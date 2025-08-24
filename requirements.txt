@@ -1,11 +1,16 @@
 # YouTube to Twitter Clipper Requirements
 # This is a fallback requirements.txt file for systems that don't support pyproject.toml
 # For proper installation, use: pip install -e .
+#
+# NOTE: For Streamlit Cloud deployment, system dependencies (like ffmpeg) 
+# are specified in packages.txt and will be automatically installed.
 
 # Core Dependencies
 streamlit>=1.28.0
 yt-dlp>=2023.10.13
 openai-whisper>=20231117
+faster-whisper>=1.2.0
+av>=15.0.0
 google-generativeai>=0.3.0
 groq>=0.4.1
 ffmpeg-python>=0.2.0
