@@ -8,7 +8,6 @@
 # Core Dependencies
 streamlit>=1.28.0
 yt-dlp>=2023.10.13
-openai-whisper>=20231117
 faster-whisper>=1.2.0
 av>=15.0.0
 google-generativeai>=0.3.0
@@ -19,6 +18,8 @@ requests>=2.31.0
 pillow>=10.0.0
 numpy>=1.24.0
 pandas>=2.0.0
+torch==2.1.0+cpu
+torchaudio==2.1.0+cpu
 
 # Development Dependencies (optional)
 # Uncomment for development setup

@@ -59,6 +59,19 @@ class Config:
     VIDEO_BITRATE: str = os.getenv("VIDEO_BITRATE", "1000k")
     AUDIO_BITRATE: str = os.getenv("AUDIO_BITRATE", "128k")
     
+    # Network and Proxy Settings
+    HTTP_PROXY: Optional[str] = os.getenv("HTTP_PROXY")
+    HTTPS_PROXY: Optional[str] = os.getenv("HTTPS_PROXY")
+    USE_PROXY_ROTATION: bool = os.getenv("USE_PROXY_ROTATION", "false").lower() == "true"
+    PROXY_LIST: Optional[str] = os.getenv("PROXY_LIST")  # Comma-separated list of proxies
+    REQUEST_TIMEOUT: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
+    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "5"))
+    
+    # Bot Detection Avoidance
+    RANDOMIZE_USER_AGENTS: bool = os.getenv("RANDOMIZE_USER_AGENTS", "true").lower() == "true"
+    USE_MOBILE_CLIENTS: bool = os.getenv("USE_MOBILE_CLIENTS", "true").lower() == "true"
+    RATE_LIMIT_DELAY: float = float(os.getenv("RATE_LIMIT_DELAY", "1.0"))
+    
     @classmethod
     def validate_config(cls) -> dict[str, bool]:
         """

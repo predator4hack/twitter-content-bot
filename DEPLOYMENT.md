@@ -79,6 +79,47 @@
 -   Use the "Manage app" option to view real-time logs
 -   Test locally first with `streamlit run src/ui/streamlit_app.py`
 
+## YouTube Bot Detection Issues
+
+### Common Error
+If you encounter this error in cloud deployments:
+```
+ERROR: [youtube] Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.
+```
+
+### Solutions Implemented
+The application automatically handles bot detection with:
+
+1. **Multiple extraction strategies**: Android, iOS, TV, and minimal clients
+2. **Enhanced headers and user agents**: Realistic browser/mobile headers
+3. **Exponential backoff retries**: Automatic retry with increasing delays
+4. **Rate limiting**: Configurable delays between requests
+
+### Environment Variables for Bot Detection
+Add these to your deployment environment:
+
+```bash
+# Rate limiting and retries
+RATE_LIMIT_DELAY=2.0
+MAX_RETRIES=5
+REQUEST_TIMEOUT=30
+
+# Bot detection avoidance
+USE_MOBILE_CLIENTS=true
+RANDOMIZE_USER_AGENTS=true
+
+# Optional: Proxy support
+# HTTP_PROXY=http://your-proxy:8080
+# HTTPS_PROXY=https://your-proxy:8080
+```
+
+### Cloud Provider Specific
+- **GCP Cloud Run**: Use regional deployments, custom VPC with NAT
+- **AWS Lambda**: Consider using Elastic IPs or VPN
+- **Heroku**: May require proxy add-ons for consistent IPs
+
+For detailed troubleshooting, see [docs/BOT_DETECTION_SOLUTIONS.md](docs/BOT_DETECTION_SOLUTIONS.md).
+
 ### Alternative Deployment Options
 
 #### Docker Deployment

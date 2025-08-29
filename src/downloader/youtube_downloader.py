@@ -12,8 +12,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 import yt_dlp
-from src.core.config import config
 from src.core.logger import get_logger, LoggerMixin
+
+
+def _get_config():
+    """Lazy import of config to avoid circular imports."""
+    from src.core.config import config
+    return config
 
 
 class YouTubeURLValidator:
@@ -95,29 +100,55 @@ class YouTubeDownloader(LoggerMixin):
         Args:
             output_dir: Directory to save downloaded videos
         """
-        self.output_dir = output_dir or config.TEMP_DIR
+        self.output_dir = output_dir or _get_config().TEMP_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # yt-dlp options with improved compatibility
+        # yt-dlp options with enhanced bot detection avoidance
         self.ydl_opts = {
             'format': self._get_format_selector(),
             'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'writethumbnail': config.EXTRACT_THUMBNAILS,
+            'writethumbnail': _get_config().EXTRACT_THUMBNAILS,
             'no_warnings': False,
             'extractflat': False,
             'ignoreerrors': False,
-            # Add user agent to avoid blocking
+            # Enhanced headers to avoid bot detection
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
             },
             # Use cookies if available
             'cookiefile': None,
-            # Retry options
-            'retries': 3,
-            'fragment_retries': 3,
+            # Enhanced retry options with exponential backoff
+            'retries': 5,
+            'fragment_retries': 5,
+            'extractor_retries': 5,
+            'retry_sleep_functions': {
+                'http': lambda n: min(4 ** n, 60),
+                'fragment': lambda n: min(2 ** n, 30),
+                'extractor': lambda n: min(2 ** n, 30),
+            },
             # SSL certificate handling
+            'nocheckcertificate': True,
+            # Rate limiting to avoid triggering bot detection
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            'sleep_interval_subtitles': 1,
+            # Additional bot detection avoidance
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage'],
+                }
+            },
+            # Proxy support (if configured)
+            'proxy': os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY'),
             'nocheckcertificate': True,
             # Avoid problematic extractors
             'extractor_retries': 3,
@@ -127,6 +158,7 @@ class YouTubeDownloader(LoggerMixin):
     
     def _get_format_selector(self) -> str:
         """Get format selector based on configuration with fallbacks."""
+        config = _get_config()
         quality = config.YTDL_QUALITY
         format_type = config.YTDL_FORMAT
         
@@ -190,17 +222,38 @@ class YouTubeDownloader(LoggerMixin):
         self.logger.info(f"Extracting info for: {normalized_url}")
         
         try:
-            # Use more robust options for info extraction
+            # Enhanced options for info extraction with bot detection avoidance
             info_opts = {
                 'quiet': False,
                 'no_warnings': False,
                 'extract_flat': False,
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Accept-Encoding': 'gzip,deflate',
+                    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                    'Keep-Alive': '300',
+                    'Connection': 'keep-alive',
                 },
-                'retries': 3,
-                'fragment_retries': 3,
-                'extractor_retries': 3,
+                'retries': 5,
+                'fragment_retries': 5,
+                'extractor_retries': 5,
+                'retry_sleep_functions': {
+                    'http': lambda n: min(4 ** n, 60),
+                    'fragment': lambda n: min(2 ** n, 30),
+                    'extractor': lambda n: min(2 ** n, 30),
+                },
+                'nocheckcertificate': True,
+                'sleep_interval': 1,
+                'max_sleep_interval': 5,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'web'],
+                        'player_skip': ['webpage'],
+                    }
+                },
+                'proxy': os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY'),
             }
             
             with yt_dlp.YoutubeDL(info_opts) as ydl:
@@ -225,8 +278,56 @@ class YouTubeDownloader(LoggerMixin):
                 }
                 
         except yt_dlp.DownloadError as e:
-            self.logger.error(f"Failed to extract video info: {e}")
-            raise ValueError(f"Could not access video: {e}")
+            error_msg = str(e).lower()
+            self.logger.warning(f"Primary extraction failed: {e}")
+            
+            # Check if it's a bot detection error
+            if any(keyword in error_msg for keyword in ['sign in', 'bot', 'cookies', 'authentication']):
+                self.logger.info("Bot detection detected, trying alternative extraction strategies...")
+                
+                # Try different extraction strategies
+                strategies = ['android', 'ios', 'tv', 'minimal']
+                for strategy in strategies:
+                    try:
+                        self.logger.info(f"Trying {strategy} extraction strategy...")
+                        alt_opts = self._get_alternative_ydl_opts(strategy)
+                        
+                        with yt_dlp.YoutubeDL(alt_opts) as ydl:
+                            info = ydl.extract_info(normalized_url, download=False)
+                            
+                            if info:
+                                self.logger.info(f"Successfully extracted info using {strategy} strategy")
+                                return {
+                                    'id': info.get('id', ''),
+                                    'title': info.get('title', 'Unknown Title'),
+                                    'duration': info.get('duration', 0),
+                                    'description': info.get('description', ''),
+                                    'uploader': info.get('uploader', 'Unknown'),
+                                    'upload_date': info.get('upload_date', ''),
+                                    'view_count': info.get('view_count', 0),
+                                    'like_count': info.get('like_count', 0),
+                                    'thumbnail': info.get('thumbnail', ''),
+                                    'webpage_url': info.get('webpage_url', normalized_url),
+                                    'formats': len(info.get('formats', [])),
+                                    'availability': info.get('availability', 'unknown'),
+                                }
+                    except Exception as alt_e:
+                        self.logger.warning(f"{strategy} strategy failed: {alt_e}")
+                        continue
+                
+                # If all strategies failed, provide helpful error message
+                raise ValueError(
+                    f"Could not access video due to bot detection. This commonly happens in cloud environments. "
+                    f"Original error: {e}. "
+                    f"To fix this, you may need to: "
+                    f"1) Use a different video URL, "
+                    f"2) Run from a different IP/location, "
+                    f"3) Use proxy settings, or "
+                    f"4) Try again later as YouTube's bot detection is temporary."
+                )
+            else:
+                raise ValueError(f"Could not access video: {e}")
+                
         except Exception as e:
             self.logger.error(f"Unexpected error extracting video info: {e}")
             raise ValueError(f"Error processing video: {e}")
@@ -255,6 +356,7 @@ class YouTubeDownloader(LoggerMixin):
         info = self.get_video_info(url)
         
         # Check duration limit
+        config = _get_config()
         if info['duration'] and info['duration'] > config.MAX_VIDEO_DURATION:
             raise ValueError(
                 f"Video duration ({info['duration']}s) exceeds maximum allowed "
@@ -291,8 +393,60 @@ class YouTubeDownloader(LoggerMixin):
                 return video_file, info
                 
         except yt_dlp.DownloadError as e:
-            self.logger.error(f"Download failed: {e}")
-            raise ValueError(f"Download failed: {e}")
+            error_msg = str(e).lower()
+            self.logger.warning(f"Primary download failed: {e}")
+            
+            # Check if it's a bot detection error
+            if any(keyword in error_msg for keyword in ['sign in', 'bot', 'cookies', 'authentication']):
+                self.logger.info("Bot detection detected during download, trying alternative strategies...")
+                
+                # Try different extraction strategies for download
+                strategies = ['android', 'ios', 'tv']
+                for strategy in strategies:
+                    try:
+                        self.logger.info(f"Trying download with {strategy} strategy...")
+                        alt_opts = self._get_alternative_ydl_opts(strategy)
+                        
+                        # Override with custom filename if provided
+                        if filename:
+                            safe_filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+                            alt_opts['outtmpl'] = str(self.output_dir / f'{safe_filename}.%(ext)s')
+                        
+                        with yt_dlp.YoutubeDL(alt_opts) as ydl:
+                            ydl.download([normalized_url])
+                            
+                            # Find the downloaded file
+                            video_file = self._find_downloaded_file(info['title'], filename)
+                            
+                            download_time = time.time() - start_time
+                            self.logger.info(f"Download completed using {strategy} strategy in {download_time:.2f}s: {video_file}")
+                            
+                            # Update metadata with download info
+                            info.update({
+                                'download_time': download_time,
+                                'file_path': str(video_file),
+                                'file_size': video_file.stat().st_size if video_file.exists() else 0,
+                                'extraction_strategy': strategy,
+                            })
+                            
+                            return video_file, info
+                            
+                    except Exception as alt_e:
+                        self.logger.warning(f"Download with {strategy} strategy failed: {alt_e}")
+                        continue
+                
+                # If all strategies failed, provide helpful error message
+                raise ValueError(
+                    f"Download failed due to bot detection. This commonly happens in cloud environments. "
+                    f"Original error: {e}. "
+                    f"To fix this, you may need to: "
+                    f"1) Use a different video URL, "
+                    f"2) Run from a different IP/location, "
+                    f"3) Use proxy settings, or "
+                    f"4) Try again later as YouTube's bot detection is temporary."
+                )
+            else:
+                raise ValueError(f"Download failed: {e}")
         except Exception as e:
             self.logger.error(f"Unexpected download error: {e}")
             raise ValueError(f"Download error: {e}")
@@ -383,6 +537,7 @@ class YouTubeDownloader(LoggerMixin):
         Returns:
             List of deleted file paths
         """
+        config = _get_config()
         if not config.CLEANUP_TEMP_FILES:
             return []
         
@@ -412,6 +567,75 @@ class YouTubeDownloader(LoggerMixin):
             self.logger.info(f"Cleaned up {len(deleted_files)} old files")
         
         return deleted_files
+    
+    def _get_alternative_ydl_opts(self, strategy: str = 'android') -> Dict:
+        """
+        Get alternative yt-dlp options for different extraction strategies.
+        
+        Args:
+            strategy: Extraction strategy ('android', 'ios', 'tv', 'minimal')
+            
+        Returns:
+            Dictionary of yt-dlp options for the specified strategy
+        """
+        base_opts = {
+            'format': self._get_format_selector(),
+            'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
+            'writesubtitles': False,
+            'writeautomaticsub': False,
+            'writethumbnail': _get_config().EXTRACT_THUMBNAILS,
+            'no_warnings': False,
+            'extractflat': False,
+            'ignoreerrors': False,
+            'nocheckcertificate': True,
+            'retries': 3,
+            'fragment_retries': 3,
+            'extractor_retries': 3,
+        }
+        
+        if strategy == 'android':
+            base_opts.update({
+                'http_headers': {
+                    'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11; SM-G981B) gzip',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                },
+            })
+        elif strategy == 'ios':
+            base_opts.update({
+                'http_headers': {
+                    'User-Agent': 'com.google.ios.youtube/17.31.4 (iPhone; CPU iPhone OS 14_6 like Mac OS X; en_US)',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios'],
+                    }
+                },
+            })
+        elif strategy == 'tv':
+            base_opts.update({
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['tv_embedded'],
+                    }
+                },
+            })
+        elif strategy == 'minimal':
+            base_opts.update({
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_skip': ['dash', 'hls'],
+                    }
+                },
+            })
+        
+        return base_opts
 
 
 class YouTubeDownloadError(Exception):

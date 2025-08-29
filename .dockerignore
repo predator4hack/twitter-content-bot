@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.log
+.venv/
+data/
+models/
+cache/
+Dockerfile
+README.md

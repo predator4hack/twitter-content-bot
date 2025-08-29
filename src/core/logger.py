@@ -9,7 +9,12 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from src.core.config import config
+
+
+def _get_config():
+    """Lazy import of config to avoid circular imports."""
+    from src.core.config import config
+    return config
 
 
 class ColoredFormatter(logging.Formatter):
@@ -49,6 +54,7 @@ def setup_logger(
         Configured logger instance
     """
     # Use config defaults if not specified
+    config = _get_config()
     level = level or config.LOG_LEVEL
     log_to_file = log_to_file if log_to_file is not None else config.LOG_TO_FILE
     log_file = log_file or config.LOG_FILE
