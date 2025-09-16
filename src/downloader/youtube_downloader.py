@@ -103,7 +103,7 @@ class YouTubeDownloader(LoggerMixin):
         self.output_dir = output_dir or _get_config().TEMP_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # yt-dlp options with enhanced bot detection avoidance
+        # yt-dlp options with minimal configuration to avoid bot detection
         self.ydl_opts = {
             'format': self._get_format_selector(),
             'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
@@ -113,51 +113,10 @@ class YouTubeDownloader(LoggerMixin):
             'no_warnings': False,
             'extractflat': False,
             'ignoreerrors': False,
-            # Enhanced headers to avoid bot detection
-            'http_headers': {
-                'User-Agent': self._get_random_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-                'Keep-Alive': '300',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-CH-UA': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
-                'Sec-CH-UA-Mobile': '?0',
-                'Sec-CH-UA-Platform': '"Linux"',
-                'DNT': '1',
-                'Cache-Control': 'max-age=0',
-                'Referer': 'https://www.google.com/'
-            },
-            # Use cookies if available
-            'cookiefile': None,
-            # Enhanced retry options with exponential backoff
-            'retries': 5,
-            'fragment_retries': 5,
-            'extractor_retries': 5,
-            'retry_sleep_functions': {
-                'http': lambda n: min(4 ** n, 60),
-                'fragment': lambda n: min(2 ** n, 30),
-                'extractor': lambda n: min(2 ** n, 30),
-            },
-            # SSL certificate handling
+            'retries': 3,
+            'fragment_retries': 3,
+            'extractor_retries': 3,
             'nocheckcertificate': True,
-            # Rate limiting to avoid triggering bot detection
-            'sleep_interval': 2,
-            'max_sleep_interval': 10,
-            'sleep_interval_subtitles': 1,
-            # Additional bot detection avoidance
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios', 'mweb'],
-                    'player_skip': ['webpage'],
-                    'skip': ['dash', 'hls']
-                }
-            },
         }
         
         self.logger.info(f"YouTube downloader initialized with output dir: {self.output_dir}")
@@ -312,51 +271,19 @@ class YouTubeDownloader(LoggerMixin):
         return self._extract_with_opts(url, opts)
     
     def _get_enhanced_ydl_opts(self) -> Dict:
-        """Get enhanced yt-dlp options with proxy and bot detection avoidance."""
+        """Get minimal yt-dlp options that avoid triggering bot detection."""
         config = _get_config()
-        
+
         opts = {
             'quiet': True,
             'no_warnings': False,
-            'extract_flat': False,
-            'http_headers': {
-                'User-Agent': self._get_random_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-CH-UA': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
-                'Sec-CH-UA-Mobile': '?0',
-                'Sec-CH-UA-Platform': '"Linux"',
-                'DNT': '1',
-                'Cache-Control': 'max-age=0',
-                'Referer': 'https://www.google.com/'
-            },
-            'retries': config.MAX_RETRIES,
-            'fragment_retries': config.MAX_RETRIES,
-            'extractor_retries': config.MAX_RETRIES,
-            'socket_timeout': config.REQUEST_TIMEOUT + 10,  # Extra time for proxy
-            'sleep_interval': config.RATE_LIMIT_DELAY,
-            'max_sleep_interval': 15,
-            'retry_sleep_functions': {
-                'http': lambda n: min(4 ** n, 60),
-                'fragment': lambda n: min(2 ** n, 30),
-                'extractor': lambda n: min(2 ** n, 30),
-            },
+            'retries': 3,
+            'fragment_retries': 3,
+            'extractor_retries': 3,
+            'socket_timeout': 30,
             'nocheckcertificate': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios', 'mweb'],
-                    'player_skip': ['webpage'],
-                    'skip': ['dash', 'hls']
-                }
-            }
         }
-        
+
         return opts
     
     def _extract_with_opts(self, url: str, opts: Dict) -> Dict:
@@ -447,7 +374,7 @@ class YouTubeDownloader(LoggerMixin):
                 self.logger.info("Bot detection detected, trying alternative extraction strategies...")
                 
                 # Try different extraction strategies
-                strategies = ['android', 'ios', 'tv', 'minimal']
+                strategies = ['basic', 'simple', 'minimal']
                 for strategy in strategies:
                     try:
                         self.logger.info(f"Trying {strategy} extraction strategy...")
@@ -562,7 +489,7 @@ class YouTubeDownloader(LoggerMixin):
                 self.logger.info("Bot detection detected during download, trying alternative strategies...")
                 
                 # Try different extraction strategies for download
-                strategies = ['android', 'ios', 'tv']
+                strategies = ['basic', 'simple', 'minimal']
                 for strategy in strategies:
                     try:
                         self.logger.info(f"Trying download with {strategy} strategy...")
@@ -729,13 +656,13 @@ class YouTubeDownloader(LoggerMixin):
         
         return deleted_files
     
-    def _get_alternative_ydl_opts(self, strategy: str = 'android') -> Dict:
+    def _get_alternative_ydl_opts(self, strategy: str = 'basic') -> Dict:
         """
-        Get alternative yt-dlp options for different extraction strategies.
-        
+        Get alternative yt-dlp options with minimal configurations.
+
         Args:
-            strategy: Extraction strategy ('android', 'ios', 'tv', 'minimal')
-            
+            strategy: Extraction strategy ('basic', 'simple', 'minimal')
+
         Returns:
             Dictionary of yt-dlp options for the specified strategy
         """
@@ -749,53 +676,23 @@ class YouTubeDownloader(LoggerMixin):
             'extractflat': False,
             'ignoreerrors': False,
             'nocheckcertificate': True,
-            'retries': 3,
-            'fragment_retries': 3,
-            'extractor_retries': 3,
+            'retries': 2,
+            'fragment_retries': 2,
+            'extractor_retries': 2,
         }
-        
-        if strategy == 'android':
+
+        # All strategies use minimal configurations to avoid bot detection
+        if strategy == 'simple':
             base_opts.update({
-                'http_headers': {
-                    'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11; SM-G981B) gzip',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android'],
-                    }
-                },
-            })
-        elif strategy == 'ios':
-            base_opts.update({
-                'http_headers': {
-                    'User-Agent': 'com.google.ios.youtube/17.31.4 (iPhone; CPU iPhone OS 14_6 like Mac OS X; en_US)',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['ios'],
-                    }
-                },
-            })
-        elif strategy == 'tv':
-            base_opts.update({
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['tv_embedded'],
-                    }
-                },
+                'socket_timeout': 20,
             })
         elif strategy == 'minimal':
             base_opts.update({
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_skip': ['dash', 'hls'],
-                    }
-                },
+                'retries': 1,
+                'fragment_retries': 1,
+                'extractor_retries': 1,
             })
-        
+
         return base_opts
 
 
