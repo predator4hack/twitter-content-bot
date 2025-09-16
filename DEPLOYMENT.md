@@ -82,12 +82,15 @@
 ## YouTube Bot Detection Issues
 
 ### Common Error
+
 If you encounter this error in cloud deployments:
+
 ```
 ERROR: [youtube] Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.
 ```
 
 ### Solutions Implemented
+
 The application automatically handles bot detection with:
 
 1. **Multiple extraction strategies**: Android, iOS, TV, and minimal clients
@@ -96,6 +99,7 @@ The application automatically handles bot detection with:
 4. **Rate limiting**: Configurable delays between requests
 
 ### Environment Variables for Bot Detection
+
 Add these to your deployment environment:
 
 ```bash
@@ -114,9 +118,10 @@ RANDOMIZE_USER_AGENTS=true
 ```
 
 ### Cloud Provider Specific
-- **GCP Cloud Run**: Use regional deployments, custom VPC with NAT
-- **AWS Lambda**: Consider using Elastic IPs or VPN
-- **Heroku**: May require proxy add-ons for consistent IPs
+
+-   **GCP Cloud Run**: Use regional deployments, custom VPC with NAT
+-   **AWS Lambda**: Consider using Elastic IPs or VPN
+-   **Heroku**: May require proxy add-ons for consistent IPs
 
 For detailed troubleshooting, see [docs/BOT_DETECTION_SOLUTIONS.md](docs/BOT_DETECTION_SOLUTIONS.md).
 

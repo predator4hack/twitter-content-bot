@@ -115,13 +115,23 @@ class YouTubeDownloader(LoggerMixin):
             'ignoreerrors': False,
             # Enhanced headers to avoid bot detection
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
+                'User-Agent': self._get_random_user_agent(),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
                 'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
                 'Keep-Alive': '300',
                 'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-CH-UA': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
+                'Sec-CH-UA-Mobile': '?0',
+                'Sec-CH-UA-Platform': '"Linux"',
+                'DNT': '1',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'https://www.google.com/'
             },
             # Use cookies if available
             'cookiefile': None,
@@ -137,24 +147,32 @@ class YouTubeDownloader(LoggerMixin):
             # SSL certificate handling
             'nocheckcertificate': True,
             # Rate limiting to avoid triggering bot detection
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
+            'sleep_interval': 2,
+            'max_sleep_interval': 10,
             'sleep_interval_subtitles': 1,
             # Additional bot detection avoidance
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['android', 'ios', 'mweb'],
                     'player_skip': ['webpage'],
+                    'skip': ['dash', 'hls']
                 }
             },
-            # Proxy support (if configured)
-            'proxy': os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY'),
-            'nocheckcertificate': True,
-            # Avoid problematic extractors
-            'extractor_retries': 3,
         }
         
         self.logger.info(f"YouTube downloader initialized with output dir: {self.output_dir}")
+    
+    def _get_random_user_agent(self) -> str:
+        """Get a random user agent for bot detection avoidance."""
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Android 13; Mobile; rv:109.0) Gecko/118.0 Firefox/118.0'
+        ]
+        import random
+        return random.choice(user_agents)
     
     def _get_format_selector(self) -> str:
         """Get format selector based on configuration with fallbacks."""
@@ -204,7 +222,7 @@ class YouTubeDownloader(LoggerMixin):
     
     def get_video_info(self, url: str) -> Dict:
         """
-        Extract video information without downloading.
+        Extract video information with enhanced bot detection avoidance.
         
         Args:
             url: YouTube video URL
@@ -219,7 +237,150 @@ class YouTubeDownloader(LoggerMixin):
             raise ValueError(f"Invalid YouTube URL: {url}")
         
         normalized_url = YouTubeURLValidator.normalize_url(url)
+        if not normalized_url:
+            raise ValueError(f"Could not normalize URL: {url}")
+        
         self.logger.info(f"Extracting info for: {normalized_url}")
+        
+        # Try multiple extraction strategies
+        strategies = [
+            self._try_standard_extraction,
+            self._try_mobile_extraction,
+            self._try_android_extraction,
+            self._try_minimal_extraction
+        ]
+        
+        last_error = None
+        for i, strategy in enumerate(strategies):
+            try:
+                if i > 0:
+                    delay = min(2 ** i, 10)  # Exponential backoff, max 10s
+                    self.logger.info(f"Waiting {delay}s before retry {i+1}...")
+                    time.sleep(delay)
+                
+                self.logger.info(f"Trying extraction strategy {i+1}/{len(strategies)}...")
+                result = strategy(normalized_url)
+                self.logger.info(f"✅ Extraction successful with strategy {i+1}")
+                return result
+                
+            except Exception as e:
+                last_error = e
+                self.logger.warning(f"Strategy {i+1} failed: {str(e)[:100]}...")
+                continue
+        
+        # All strategies failed - provide helpful error message
+        error_msg = str(last_error).lower() if last_error else ""
+        if any(phrase in error_msg for phrase in ["sign in", "bot", "captcha", "cookies"]):
+            helpful_msg = (
+                f"Could not access video due to bot detection. This commonly happens in cloud environments. "
+                f"Original error: {str(last_error)} "
+                f"The proxy and multiple strategies were attempted. "
+                f"To fix this, you may need to: "
+                f"1) Use a different video URL, "
+                f"2) Run from a different IP/location, "
+                f"3) Use proxy settings, or "
+                f"4) Try again later as YouTube's bot detection is temporary."
+            )
+            raise ValueError(helpful_msg)
+        else:
+            raise ValueError(f"All extraction strategies failed. Last error: {last_error}")
+    
+    def _try_standard_extraction(self, url: str) -> Dict:
+        """Standard extraction with proxy."""
+        opts = self._get_enhanced_ydl_opts()
+        return self._extract_with_opts(url, opts)
+    
+    def _try_mobile_extraction(self, url: str) -> Dict:
+        """Mobile-specific extraction."""
+        opts = self._get_enhanced_ydl_opts()
+        opts['http_headers']['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
+        opts['extractor_args']['youtube']['player_client'] = ['mweb']
+        return self._extract_with_opts(url, opts)
+    
+    def _try_android_extraction(self, url: str) -> Dict:
+        """Android app extraction."""
+        opts = self._get_enhanced_ydl_opts()
+        opts['http_headers']['User-Agent'] = 'com.google.android.youtube/19.09.36 (Linux; U; Android 11)'
+        opts['extractor_args']['youtube']['player_client'] = ['android']
+        return self._extract_with_opts(url, opts)
+    
+    def _try_minimal_extraction(self, url: str) -> Dict:
+        """Minimal extraction as last resort."""
+        opts = self._get_enhanced_ydl_opts()
+        opts['extract_flat'] = False
+        opts['extractor_args']['youtube']['skip'] = ['dash', 'hls', 'live_chat']
+        return self._extract_with_opts(url, opts)
+    
+    def _get_enhanced_ydl_opts(self) -> Dict:
+        """Get enhanced yt-dlp options with proxy and bot detection avoidance."""
+        config = _get_config()
+        
+        opts = {
+            'quiet': True,
+            'no_warnings': False,
+            'extract_flat': False,
+            'http_headers': {
+                'User-Agent': self._get_random_user_agent(),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-CH-UA': '"Google Chrome";v="120", "Chromium";v="120", "Not:A-Brand";v="99"',
+                'Sec-CH-UA-Mobile': '?0',
+                'Sec-CH-UA-Platform': '"Linux"',
+                'DNT': '1',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'https://www.google.com/'
+            },
+            'retries': config.MAX_RETRIES,
+            'fragment_retries': config.MAX_RETRIES,
+            'extractor_retries': config.MAX_RETRIES,
+            'socket_timeout': config.REQUEST_TIMEOUT + 10,  # Extra time for proxy
+            'sleep_interval': config.RATE_LIMIT_DELAY,
+            'max_sleep_interval': 15,
+            'retry_sleep_functions': {
+                'http': lambda n: min(4 ** n, 60),
+                'fragment': lambda n: min(2 ** n, 30),
+                'extractor': lambda n: min(2 ** n, 30),
+            },
+            'nocheckcertificate': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'mweb'],
+                    'player_skip': ['webpage'],
+                    'skip': ['dash', 'hls']
+                }
+            }
+        }
+        
+        return opts
+    
+    def _extract_with_opts(self, url: str, opts: Dict) -> Dict:
+        """Extract video info with given options."""
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            if not info:
+                raise ValueError("No video information could be extracted")
+            
+            return {
+                'id': info.get('id', ''),
+                'title': info.get('title', 'Unknown Title'),
+                'duration': info.get('duration', 0),
+                'description': info.get('description', ''),
+                'uploader': info.get('uploader', 'Unknown'),
+                'upload_date': info.get('upload_date', ''),
+                'view_count': info.get('view_count', 0),
+                'like_count': info.get('like_count', 0),
+                'thumbnail': info.get('thumbnail', ''),
+                'webpage_url': info.get('webpage_url', url),
+                'formats': len(info.get('formats', [])),
+                'availability': info.get('availability', 'unknown')
+            }
         
         try:
             # Enhanced options for info extraction with bot detection avoidance
