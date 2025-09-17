@@ -13,6 +13,14 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Clear proxy environment variables if BYPASS_PROXY is enabled
+if os.getenv("BYPASS_PROXY", "true").lower() == "true":
+    # Clear all possible proxy environment variables
+    proxy_vars = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"]
+    for var in proxy_vars:
+        if var in os.environ:
+            del os.environ[var]
+
 
 class Config:
     """Application configuration with environment variable support."""
@@ -62,6 +70,7 @@ class Config:
     # Network Settings
     REQUEST_TIMEOUT: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "5"))
+    BYPASS_PROXY: bool = os.getenv("BYPASS_PROXY", "true").lower() == "true"
     
     # Bot Detection Avoidance
     RANDOMIZE_USER_AGENTS: bool = os.getenv("RANDOMIZE_USER_AGENTS", "true").lower() == "true"

@@ -299,16 +299,20 @@ def analyze_content_with_llm(transcription_result):
         # Create LLM analyzer - try different providers for SSL issues
         from src.analyzer.llm_analyzer import LLMAnalyzerFactory
         
-        # Get available providers and prefer Groq if available (fewer SSL issues)
+        # Get available providers and use the configured default
         available_providers = LLMAnalyzerFactory.get_available_providers()
         print(f"🔧 DEBUG: Available LLM providers: {available_providers}")
+        print(f"🔧 DEBUG: Configured default provider: {config.DEFAULT_LLM_PROVIDER}")
         
-        if "groq" in available_providers:
-            print(f"🔧 DEBUG: Using Groq provider (more reliable)")
-            analyzer = LLMAnalyzerFactory.create_analyzer("groq")
-        elif "gemini" in available_providers:
-            print(f"🔧 DEBUG: Using Gemini provider")
-            analyzer = LLMAnalyzerFactory.create_analyzer("gemini")
+        # Use the configured default provider if available
+        if config.DEFAULT_LLM_PROVIDER in available_providers:
+            print(f"🔧 DEBUG: Using configured default provider: {config.DEFAULT_LLM_PROVIDER}")
+            analyzer = LLMAnalyzerFactory.create_analyzer(config.DEFAULT_LLM_PROVIDER)
+        elif available_providers:
+            # Fallback to any available provider
+            fallback_provider = available_providers[0]
+            print(f"🔧 DEBUG: Default provider '{config.DEFAULT_LLM_PROVIDER}' not available, using fallback: {fallback_provider}")
+            analyzer = LLMAnalyzerFactory.create_analyzer(fallback_provider)
         else:
             raise ValueError("No LLM providers available - check API keys")
         

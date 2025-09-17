@@ -132,7 +132,7 @@ class TwitterClipPipeline:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         enable_progress_callback: bool = True,
-        llm_provider: str = "gemini",
+        llm_provider: Optional[str] = None,
         whisper_model: str = "base",
         cleanup_temp_files: bool = True
     ):
@@ -145,7 +145,7 @@ class TwitterClipPipeline:
             max_retries: Maximum retry attempts per stage
             retry_delay: Delay between retries (seconds)
             enable_progress_callback: Enable progress tracking
-            llm_provider: LLM provider ("gemini" or "groq")
+            llm_provider: LLM provider ("gemini" or "groq", uses config default if None)
             whisper_model: Whisper model size
             cleanup_temp_files: Clean up temporary files after completion
         """
@@ -154,7 +154,7 @@ class TwitterClipPipeline:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.enable_progress_callback = enable_progress_callback
-        self.llm_provider = llm_provider
+        self.llm_provider = llm_provider or config.DEFAULT_LLM_PROVIDER
         self.whisper_model = whisper_model
         self.cleanup_temp_files = cleanup_temp_files
         
@@ -548,7 +548,7 @@ async def process_youtube_video(
     output_dir: Optional[Path] = None,
     num_clips: int = 2,
     max_clip_duration: int = 140,
-    llm_provider: str = "gemini",
+    llm_provider: Optional[str] = None,
     progress_callback: Optional[Callable[[PipelineProgress], None]] = None
 ) -> PipelineResult:
     """
@@ -559,7 +559,7 @@ async def process_youtube_video(
         output_dir: Output directory for final clips
         num_clips: Number of clips to extract
         max_clip_duration: Maximum clip duration in seconds
-        llm_provider: LLM provider ("gemini" or "groq")
+        llm_provider: LLM provider ("gemini" or "groq", uses config default if None)
         progress_callback: Optional progress callback function
         
     Returns:

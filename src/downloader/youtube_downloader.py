@@ -104,12 +104,13 @@ class YouTubeDownloader(LoggerMixin):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # yt-dlp options with minimal configuration to avoid bot detection
+        config = _get_config()
         self.ydl_opts = {
             'format': self._get_format_selector(),
             'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'writethumbnail': _get_config().EXTRACT_THUMBNAILS,
+            'writethumbnail': config.EXTRACT_THUMBNAILS,
             'no_warnings': False,
             'extractflat': False,
             'ignoreerrors': False,
@@ -119,7 +120,16 @@ class YouTubeDownloader(LoggerMixin):
             'nocheckcertificate': True,
         }
         
+        # Explicitly disable proxy if bypass is enabled
+        if config.BYPASS_PROXY:
+            self.ydl_opts['proxy'] = ''  # Empty string disables proxy entirely
+            self.ydl_opts['no_proxy'] = True  # Additional proxy bypass option
+        
         self.logger.info(f"YouTube downloader initialized with output dir: {self.output_dir}")
+        if config.BYPASS_PROXY:
+            self.logger.info("🚫 Proxy bypass enabled - all proxy settings cleared, using direct connections")
+            self.logger.info(f"📋 ydl_opts proxy setting: '{self.ydl_opts.get('proxy', 'NOT SET')}'")
+            self.logger.info(f"📋 ydl_opts no_proxy setting: {self.ydl_opts.get('no_proxy', 'NOT SET')}")
     
     def _get_random_user_agent(self) -> str:
         """Get a random user agent for bot detection avoidance."""
@@ -233,12 +243,12 @@ class YouTubeDownloader(LoggerMixin):
             helpful_msg = (
                 f"Could not access video due to bot detection. This commonly happens in cloud environments. "
                 f"Original error: {str(last_error)} "
-                f"The proxy and multiple strategies were attempted. "
+                f"Multiple extraction strategies were attempted. "
                 f"To fix this, you may need to: "
                 f"1) Use a different video URL, "
                 f"2) Run from a different IP/location, "
-                f"3) Use proxy settings, or "
-                f"4) Try again later as YouTube's bot detection is temporary."
+                f"3) Try again later as YouTube's bot detection is temporary, or "
+                f"4) Check if the video is available in your region."
             )
             raise ValueError(helpful_msg)
         else:
@@ -284,6 +294,11 @@ class YouTubeDownloader(LoggerMixin):
             'nocheckcertificate': True,
         }
 
+        # Explicitly disable proxy if bypass is enabled
+        if config.BYPASS_PROXY:
+            opts['proxy'] = ''  # Empty string disables proxy entirely
+            opts['no_proxy'] = True  # Additional proxy bypass option
+
         return opts
     
     def _extract_with_opts(self, url: str, opts: Dict) -> Dict:
@@ -311,6 +326,7 @@ class YouTubeDownloader(LoggerMixin):
         
         try:
             # Enhanced options for info extraction with bot detection avoidance
+            config = _get_config()
             info_opts = {
                 'quiet': False,
                 'no_warnings': False,
@@ -341,8 +357,12 @@ class YouTubeDownloader(LoggerMixin):
                         'player_skip': ['webpage'],
                     }
                 },
-                'proxy': os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY'),
             }
+            
+            # Explicitly disable proxy if bypass is enabled
+            if config.BYPASS_PROXY:
+                info_opts['proxy'] = ''  # Empty string disables proxy entirely
+                info_opts['no_proxy'] = True  # Additional proxy bypass option
             
             with yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(normalized_url, download=False)
@@ -410,8 +430,8 @@ class YouTubeDownloader(LoggerMixin):
                     f"To fix this, you may need to: "
                     f"1) Use a different video URL, "
                     f"2) Run from a different IP/location, "
-                    f"3) Use proxy settings, or "
-                    f"4) Try again later as YouTube's bot detection is temporary."
+                    f"3) Try again later as YouTube's bot detection is temporary, or "
+                    f"4) Check if the video is available in your region."
                 )
             else:
                 raise ValueError(f"Could not access video: {e}")
@@ -530,8 +550,8 @@ class YouTubeDownloader(LoggerMixin):
                     f"To fix this, you may need to: "
                     f"1) Use a different video URL, "
                     f"2) Run from a different IP/location, "
-                    f"3) Use proxy settings, or "
-                    f"4) Try again later as YouTube's bot detection is temporary."
+                    f"3) Try again later as YouTube's bot detection is temporary, or "
+                    f"4) Check if the video is available in your region."
                 )
             else:
                 raise ValueError(f"Download failed: {e}")
@@ -666,12 +686,13 @@ class YouTubeDownloader(LoggerMixin):
         Returns:
             Dictionary of yt-dlp options for the specified strategy
         """
+        config = _get_config()
         base_opts = {
             'format': self._get_format_selector(),
             'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'writethumbnail': _get_config().EXTRACT_THUMBNAILS,
+            'writethumbnail': config.EXTRACT_THUMBNAILS,
             'no_warnings': False,
             'extractflat': False,
             'ignoreerrors': False,
@@ -680,6 +701,11 @@ class YouTubeDownloader(LoggerMixin):
             'fragment_retries': 2,
             'extractor_retries': 2,
         }
+
+        # Explicitly disable proxy if bypass is enabled
+        if config.BYPASS_PROXY:
+            base_opts['proxy'] = ''  # Empty string disables proxy entirely
+            base_opts['no_proxy'] = True  # Additional proxy bypass option
 
         # All strategies use minimal configurations to avoid bot detection
         if strategy == 'simple':
